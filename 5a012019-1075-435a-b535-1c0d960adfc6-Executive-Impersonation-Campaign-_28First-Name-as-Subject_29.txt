@@ -1,0 +1,20 @@
+EmailEvents
+| where Timestamp > ago(30d)
+| where SenderFromAddress endswith "@gmail.com"
+| where AttachmentCount == 0
+| where UrlCount == 0
+| join kind=leftouter (
+    IdentityInfo
+    | project AccountObjectId, GivenName, AccountDisplayName
+    | summarize arg_max(AccountObjectId, GivenName, AccountDisplayName) by AccountObjectId
+) on $left.RecipientObjectId == $right.AccountObjectId
+| extend RecipientFirstName = case(
+    isnotempty(GivenName), GivenName,
+    isnotempty(AccountDisplayName), tostring(split(AccountDisplayName, " ")[0]),
+    tostring(split(RecipientObjectId, "@")[0])
+)
+| where isnotempty(RecipientFirstName)
+| where Subject =~ RecipientFirstName
+| where DeliveryAction != "Blocked"
+| project Timestamp, SenderFromAddress, RecipientEmailAddress, Subject, RecipientFirstName, DeliveryAction, DeliveryLocation, AuthenticationDetails, NetworkMessageId, ReportId
+| sort by Timestamp desc

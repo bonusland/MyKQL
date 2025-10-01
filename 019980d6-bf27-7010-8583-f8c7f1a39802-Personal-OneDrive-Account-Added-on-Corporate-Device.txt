@@ -1,0 +1,7 @@
+let timerange = 30d;
+DeviceRegistryEvents 
+|where Timestamp > ago(timerange)
+| where InitiatingProcessVersionInfoOriginalFileName == @"OneDrive.exe"
+| where RegistryValueData matches regex @"C:\\Users\\[^\\]+\\OneDrive\\"
+| where InitiatingProcessCommandLine != @"updateInstalled /background"
+// check in InitiatingProcessCommandLine for email address used to connect to onedriv

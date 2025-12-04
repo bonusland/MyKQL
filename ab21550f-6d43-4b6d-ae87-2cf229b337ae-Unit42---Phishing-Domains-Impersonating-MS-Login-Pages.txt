@@ -1,0 +1,65 @@
+// ============================================================================
+// Unit42 - Phishing Domains Impersonating MS Login Pages
+// Author: KillBillKill98
+// Last Updated: 2025-09-18
+// ============================================================================
+// Tactic(s): Initial Access (TA0001), Command & Control (TA0011)
+// Technique(s): Phishing (T1566), Drive-by Compromise (T1189), Web Service (T1102)
+// Description & Rationale:
+//  - Pulls a CSV of known phishing domains from external IOC repo
+//  - Scans EmailUrlInfo for inbound phishing URLs
+//  - Scans DeviceNetworkEvents for endpoint traffic to phishing domains
+//  - Combines both views in a single correlated dataset
+// ============================================================================
+
+
+// Define the time period for the search
+let QueryPeriod = 30d;
+
+// Get the list of domains from the specified external CSV file.
+// The list is converted to a set for optimal performance in the 'in' operator.
+let PhishDomains = externaldata(Type:string, Value:string, Source:string)
+    [h'https://raw.githubusercontent.com/SlimKQL/Hunting-Queries-Detection-Rules/refs/heads/main/IOC/unit42phishingcampaign.csv']
+    with(format="csv")
+| where Type == "domain"
+| summarize make_set(Value);
+
+// Part 1: Scan email events for URLs pointing to a malicious domain.
+let ScanEmailURLs = EmailUrlInfo
+| where Timestamp > ago(QueryPeriod)
+| where UrlDomain in (PhishDomains)
+| project
+    Timestamp,
+    SourceTable = "EmailUrlInfo",
+    MatchedIndicator = UrlDomain,
+    ActionType = "EmailURLDetected",
+    DeviceName = "", // Email events don't have a device name
+    AccountUpn = RecipientEmailAddress,
+    Details = pack("Subject", Subject, "Sender", SenderFromAddress, "NetworkMessageId", NetworkMessageId);
+
+// Part 2: Scan endpoint network events in a single, efficient pass.
+let ScanEndpointNetwork = DeviceNetworkEvents
+| where Timestamp > ago(QueryPeriod)
+// Filter for relevant network actions in one go
+| where ActionType in ("ConnectionSuccess", "HttpConnectionInspected")
+// For "ConnectionSuccess", parse the domain from the full RemoteUrl
+| extend ParsedHost = tostring(parse_url(RemoteUrl).Host)
+// For "HttpConnectionInspected", the host is in the AdditionalFields JSON
+| extend HttpHost = todynamic(AdditionalFields).host
+// Normalize the found domain from either source into a single column
+| extend MatchedIndicator = coalesce(ParsedHost, HttpHost)
+// Check if the normalized domain is in our phishing list
+| where MatchedIndicator in (PhishDomains)
+| project
+    Timestamp,
+    SourceTable = "DeviceNetworkEvents",
+    MatchedIndicator,
+    ActionType,
+    DeviceName,
+    AccountUpn = InitiatingProcessAccountUpn,
+    Details = pack("RemoteUrl", RemoteUrl, "Process", InitiatingProcessFileName, "RemoteIP", RemoteIP);
+
+// Part 3: Combine the results from email and endpoint sources.
+union ScanEmailURLs, ScanEndpointNetwork
+
+| order by Timestamp desc

@@ -1,0 +1,17 @@
+let ropc_success = union AADNonInteractiveUserSignInLogs, SigninLogs
+  | extend StatusJson = parse_json(Status_dynamic)
+  | extend errorCode = tostring(StatusJson.errorCode)
+  | where isnotempty(UserId)
+  | where AuthenticationProtocol == "ropc"
+      and errorCode == "0"
+      and AppId == "29d9ed98-a469-4536-ade2-f981bc1d605e" // Microsoft Authentication Broker
+      and ResourceId == "d4ebce55-015a-49b5-a083-c84d1797ae8c" // Microsoft Intune Enrollment
+  | project userId = UserId, ropcTime = CreatedDateTime;
+AuditLogs
+  | where ActivityDisplayName == "Register device"
+      and Result == "success"
+      and isnotempty( InitiatedBy.user.id)
+  | extend userId = tostring(InitiatedBy.user.id)
+  | join kind=inner ropc_success on userId
+  | extend daysDiff = datetime_diff("day", TimeGenerated, ropcTime)
+  | where daysDiff between (0 .. 2)

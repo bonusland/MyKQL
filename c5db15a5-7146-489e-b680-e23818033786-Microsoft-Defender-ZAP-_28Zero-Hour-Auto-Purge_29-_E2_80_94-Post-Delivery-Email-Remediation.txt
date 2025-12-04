@@ -1,0 +1,29 @@
+// ============================================================================
+// ZAP (Zero-Hour Auto Purge) — Post-Delivery Email Remediation
+// Author: KillBillKill98
+// Last Updated: 2025-09-18
+// ============================================================================
+// Tactic(s): Initial Access (TA0001)
+// Technique(s): Spearphishing via Link/Attachment (T1566.001 / T1566.002)
+// Description & Rationale:
+//  - Microsoft Defender ZAP (Zero-hour Auto Purge) removes malicious or phishing
+//    emails *after* delivery when threats are identified post-delivery.
+//  - This detection correlates original delivery with post-delivery ZAP actions
+//    to measure dwell time (time between delivery and purge).
+//  - Useful for incident response (how long a user could have interacted with a
+//    malicious message before it was removed).
+// ============================================================================
+
+let OriginalEmailTime = (EmailEvents
+| where Timestamp > ago(30d)
+| extend Email_Time = Timestamp
+| project Email_Time, NetworkMessageId, Subject, SenderFromAddress, ThreatTypes, DeliveryAction, DeliveryLocation);
+
+EmailPostDeliveryEvents
+| where Timestamp > ago(30d)
+| where ActionType in ("Malware ZAP", "Phish ZAP")
+| extend ZAP_Time = Timestamp
+| join kind=inner OriginalEmailTime on NetworkMessageId
+| extend Time_Difference = ZAP_Time - Email_Time
+| project NetworkMessageId, Email_Time, ZAP_Time, Time_Difference, ActionType, ThreatTypes, DetectionMethods, DeliveryAction, DeliveryLocation
+

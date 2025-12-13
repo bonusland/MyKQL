@@ -1,0 +1,20 @@
+// 1. Source both Entra ID Sign-in logs and Elastic Agent System metrics
+FROM logs-azure.signin-*, metrics-system.uptime-*
+// 2. Set a time window (e.g., look back 7 days for Entra, 1 day for Fleet)
+| WHERE @timestamp > NOW() - 7 day
+// 3. Normalize the device name into a single field 'asset_name'
+| EVAL asset_name = CASE(
+    ISNOTNULL(deviceDetail.displayName), TO_LOWER(deviceDetail.displayName),
+    ISNOTNULL(host.name), TO_LOWER(host.name)
+   )
+// 4. Remove events where we couldn't find a device name
+| WHERE ISNOTNULL(asset_name)
+// 5. Aggregate stats per device
+| STATS
+    entra_activity = COUNT_IF(ISNOTNULL(deviceDetail.displayName)),
+    fleet_activity = COUNT_IF(ISNOTNULL(host.name))
+  BY asset_name
+// 6. The "Gap Analysis": Keep only devices seen in Entra but NOT in Fleet
+| WHERE entra_activity > 0 AND fleet_activity == 0
+| SORT asset_name ASC
+| LIMIT 100

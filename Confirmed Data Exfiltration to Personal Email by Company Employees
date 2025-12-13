@@ -1,0 +1,84 @@
+let personal_email_domains = dynamic([
+    "gmail.com","yahoo.com","hotmail.com","aol.com","outlook.com","icloud.com","live.com","msn.com",
+    "comcast.net","protonmail.com","zoho.com","yandex.com","gmx.com","mail.com","cox.net","verizon.net",
+    "att.net","sbcglobal.net","bellsouth.net","earthlink.net","talktalk.net"
+]);
+let stopwords = dynamic(["mr","mrs","ms","dr","team","support","service","services","info","sales"]);
+let base =
+EmailEvents
+| where SenderFromAddress contains "YOUR COMPANY NAME KEYWORD OR DOMAIN NAME"
+| where isnotempty(SenderDisplayName) and isnotempty(RecipientEmailAddress)
+| extend RDomain = tostring(split(RecipientEmailAddress, "@")[1])
+| where RDomain in~ (personal_email_domains)
+| extend LocalPart = tolower(tostring(split(RecipientEmailAddress, "@")[0]))
+| extend CleanDisplayName = trim(" ", tolower(replace_regex(SenderDisplayName, @"[^a-z0-9]+", " ")))
+| extend nameTokens = split(CleanDisplayName, " ")
+| mv-expand token = nameTokens to typeof(string)
+| where strlen(token) > 0 and token !in (stopwords)
+| where LocalPart contains token
+| project Timestamp, SenderDisplayName, SenderFromAddress, RecipientEmailAddress, Subject, NetworkMessageId;
+base
+| join kind=leftouter (
+    EmailAttachmentInfo
+    | project
+        NetworkMessageId,
+        RecipientEmailAddress,
+        FileName,
+        FileExt = tolower(split(FileName, ".")[-1]),
+        IsImage = iif(tolower(split(FileName, ".")[-1]) in~ ("jpg","jpeg","png","gif","bmp","tif","tiff","svg","heic","webp"), 1, 0),
+        HasCvLike = iif(
+              FileName contains "cv"
+           or FileName contains "resume"
+           or FileName contains "biodata"
+           or FileName contains "curriculum"
+           or FileName contains "application",
+           1, 0),
+        HasSensitive = iif(
+              FileName contains "confidential"
+           or FileName contains "secret"
+           or FileName contains "restricted"
+           or FileName contains "classified"
+           or FileName contains "sensitive"
+           or FileName contains "important",
+           1, 0)
+) on NetworkMessageId, RecipientEmailAddress
+| summarize
+      TotalEmailsSent           = dcount(NetworkMessageId),
+      TotalAttachments          = countif(isnotempty(FileName)),
+      TotalImageAttachments     = sum(IsImage),
+      TotalCvLikeAttachments    = sum(HasCvLike),
+      TotalSensitiveAttachments = sum(HasSensitive),
+      LastEmailSent             = max(Timestamp),
+      Subjects                  = make_set(Subject),
+      AttachmentFileNames       = make_set(FileName)
+  by SenderDisplayName, SenderFromAddress, RecipientEmailAddress
+| extend
+      AttachmentsPerEmail = iif(TotalEmailsSent == 0, 0.0, todouble(TotalAttachments) / todouble(TotalEmailsSent)),
+      NonImageAttachments = TotalAttachments - TotalImageAttachments,
+      ImageAttachmentRatio = iif(TotalAttachments == 0, 0.0, todouble(TotalImageAttachments) / todouble(TotalAttachments))
+| extend
+      RiskScore =
+          0.0
+          + 1.0 * iif(TotalEmailsSent > 20, 20.0, todouble(TotalEmailsSent))
+          + 2.0 * iif(AttachmentsPerEmail > 10.0, 10.0, AttachmentsPerEmail)
+          + 1.0 * iif(NonImageAttachments > 20, 20.0, todouble(NonImageAttachments))
+          - 5.0 * iif(TotalAttachments > 0 and ImageAttachmentRatio >= 0.7, 1.0, 0.0)
+          + 15.0 * iif(TotalSensitiveAttachments > 0, 1.0, 0.0)
+          - 10.0 * iif(TotalCvLikeAttachments > 0, 1.0, 0.0)
+          - 5.0 * iif(TotalAttachments == 0, 1.0, 0.0)
+| order by RiskScore desc, LastEmailSent desc
+| project
+      RiskScore,
+      SenderDisplayName,
+      SenderFromAddress,
+      RecipientEmailAddress,
+      TotalEmailsSent,
+      TotalAttachments,
+      TotalSensitiveAttachments,
+      AttachmentsPerEmail,
+      NonImageAttachments,
+      ImageAttachmentRatio,
+      LastEmailSent,
+      Subjects,
+      AttachmentFileNames
+| order by RiskScore desc, LastEmailSent desc

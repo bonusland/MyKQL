@@ -1,20 +1,25 @@
-// 1. Source both Entra ID Sign-in logs and Elastic Agent System metrics
-FROM logs-azure.signin-*, metrics-system.uptime-*
-// 2. Set a time window (e.g., look back 7 days for Entra, 1 day for Fleet)
-| WHERE @timestamp > NOW() - 7 day
-// 3. Normalize the device name into a single field 'asset_name'
+// 1. Source both the Entra Device Inventory and Fleet Agent Heartbeats
+FROM logs-entityanalytics_entra_id*, metrics-system.uptime-*
+// 2. Set Time Window (e.g., look back 24 hours to ensure we don't alert on transient blips)
+| WHERE @timestamp > NOW() - 24 hour
+// 3. Normalize the Asset Name
+//    If the event is from Entra, use 'azure_ad.displayName'.
+//    If the event is from Fleet, use 'host.name'.
+//    Convert to lowercase to ensure 'Desktop-ABC' matches 'desktop-abc'.
 | EVAL asset_name = CASE(
-    ISNOTNULL(deviceDetail.displayName), TO_LOWER(deviceDetail.displayName),
+    ISNOTNULL(azure_ad.displayName), TO_LOWER(azure_ad.displayName),
     ISNOTNULL(host.name), TO_LOWER(host.name)
    )
-// 4. Remove events where we couldn't find a device name
+// 4. Filter out any logs that didn't have a name
 | WHERE ISNOTNULL(asset_name)
-// 5. Aggregate stats per device
+// 5. Pivot / Aggregate: Count how many times we saw this device in Entra vs Fleet
 | STATS
-    entra_activity = COUNT_IF(ISNOTNULL(deviceDetail.displayName)),
-    fleet_activity = COUNT_IF(ISNOTNULL(host.name))
+    entra_inventory_count = COUNT_IF(ISNOTNULL(azure_ad.displayName)),
+    fleet_heartbeat_count = COUNT_IF(ISNOTNULL(host.name))
   BY asset_name
-// 6. The "Gap Analysis": Keep only devices seen in Entra but NOT in Fleet
-| WHERE entra_activity > 0 AND fleet_activity == 0
+// 6. The Gap Analysis Logic
+//    Show me devices that exist in Entra Inventory (> 0)
+//    BUT have sent ZERO heartbeats to Fleet (== 0)
+| WHERE entra_inventory_count > 0 AND fleet_heartbeat_count == 0
 | SORT asset_name ASC
 | LIMIT 100

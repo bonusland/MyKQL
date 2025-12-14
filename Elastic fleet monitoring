@@ -23,3 +23,40 @@ FROM logs-entityanalytics_entra_id*, metrics-system.uptime-*
 | WHERE entra_inventory_count > 0 AND fleet_heartbeat_count == 0
 | SORT asset_name ASC
 | LIMIT 100
+
+
+
+Shadow IT / Missing Agent Report:
+
+Device Name: {{context.item.asset_name}}
+Source: Microsoft Entra ID Entity Analytics
+Issue: Device is listed in Entra ID inventory but has sent NO heartbeat to Elastic Fleet in the last 24 hours.
+
+Troubleshooting:
+1. Check if the device is turned on.
+2. Verify Elastic Agent service is running.
+3. Run Intune remediation script if applicable.
+
+3. Rule Configuration Steps
+
+    Rule Type: Select Elasticsearch query.
+
+    Query Language: Select ES|QL.
+
+    Query: Paste the code block above.
+
+    Action Frequency: Run this Daily (e.g., "Every 1 day").
+
+        Reason: Inventory data doesn't change by the minute. Running this hourly might be noisy if a device reboots.
+
+    Alert Grouping: "Create an alert for each row".
+
+        This ensures you get a specific alert for "DESKTOP-LETW452G" rather than a generic "Devices Missing" alert.
+
+4. Alert Message (Mustache Template)
+
+When configuring the email or Slack notification, use these variables:
+
+    Subject: Gap Detected: Device '{{context.item.asset_name}}' is missing Elastic Agent
+
+    Body:

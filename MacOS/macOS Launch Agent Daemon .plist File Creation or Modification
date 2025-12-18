@@ -1,0 +1,12 @@
+DeviceFileEvents
+| where ActionType in ("FileCreated", "FileModified")
+| where FolderPath has_any (
+    "/Library/LaunchAgents/",
+    "/Library/LaunchDaemons/",
+    "/System/Library/LaunchAgents/",
+    "/System/Library/LaunchDaemons/"
+    )
+    or FolderPath contains "/Users/" and FolderPath contains "/Library/LaunchAgents/"
+| where FileName endswith ".plist"
+| where InitiatingProcessAccountName != "root" 
+    or InitiatingProcessFileName !in ("installer", "softwareupdated", "installd")

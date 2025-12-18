@@ -1,0 +1,31 @@
+let timeframe = 30d;
+
+//list of script interpreters often used for malicious purposes
+let script_interpreters = pack_array("osascript", "sh", "bash", "zsh");
+
+//list of legitimate applications that are known to spawn shell scripts.
+// This list should be customized for your environment to reduce potential false positives.
+let legitimate_parents_filter = pack_array("Terminal", "iTerm2", "Xcode", "zsh", "bash", "sh", "sshd", "login", "cron", "jamf", "code", "Automator");
+
+DeviceProcessEvents
+| where Timestamp > ago(timeframe)
+| where DevicePlatform == "macOS"
+| where FileName in (script_interpreters)
+| where isnotempty(InitiatingProcessSigner)
+| where not(InitiatingProcessFileName has_any (legitimate_parents_filter))
+| extend IsKnownBadSigner = iif(InitiatingProcessSigner contains "A2FTSWF4A2", true, false)
+| where IsKnownBadSigner or ProcessCommandLine has_any ("-e", "/tmp/", "/var/folders/")
+| project
+    Timestamp,
+    DeviceName,
+    AccountName,
+    InitiatingProcessFileName,
+    InitiatingProcessSigner,
+    InitiatingProcessCommandLine,
+    IsKnownBadSigner,
+    FileName,
+    ProcessCommandLine,
+    InitiatingProcessFolderPath,
+    FolderPath,
+    ProcessId,
+    InitiatingProcessId

@@ -1,343 +1,477 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Calculator, 
-  Database, 
-  ShieldCheck, 
-  Clock, 
-  Info, 
-  ArrowRight,
-  ChevronRight,
-  TrendingDown,
-  Server
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel Log Strategy Planner | LockBase Inspired</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .bg-slate-950 { background-color: #020617; }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; margin: 0; 
+        }
+        .step-hidden { display: none; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
 
-/**
- * Microsoft Sentinel Pricing Data (2026 Simplified Tiers)
- * Simplified tiers combine Log Analytics + Sentinel costs.
- */
-const PRICING = {
-  PAYG: 4.30, // Per GB
-  TIERS: [
-    { label: "50 GB", dailyCost: 161.25, minGB: 50 },
-    { label: "100 GB", dailyCost: 296.00, minGB: 100 },
-    { label: "200 GB", dailyCost: 548.00, minGB: 200 },
-    { label: "300 GB", dailyCost: 800.00, minGB: 300 },
-    { label: "400 GB", dailyCost: 1037.33, minGB: 400 },
-    { label: "500 GB", dailyCost: 1265.00, minGB: 500 },
-    { label: "1000 GB", dailyCost: 2400.00, minGB: 1000 },
-  ],
-  RETENTION_PER_GB_MONTH: 0.12, // After free 90 days
-  DEFENDER_P2_ALLOWANCE: 0.5, // 500MB per server/day
-};
+    <!-- Header -->
+    <header class="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div class="flex items-center gap-4">
+                <div class="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-600/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">Sentinel Log Planner</h1>
+                    <p class="text-xs text-slate-500 font-medium uppercase tracking-widest">Enterprise Strategy Tool</p>
+                </div>
+            </div>
 
-const App = () => {
-  // --- State ---
-  const [ingestion, setIngestion] = useState(25);
-  const [retentionMonths, setRetentionMonths] = useState(3);
-  const [p2Servers, setP2Servers] = useState(0);
-  const [freeData, setFreeData] = useState(0);
+            <!-- Navigation -->
+            <div class="flex flex-wrap items-center gap-3">
+                <button onclick="switchStep(0)" id="nav-0" class="nav-btn flex items-center gap-2 px-4 py-2 rounded-lg transition-all border bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                    <span class="font-medium">Setup</span>
+                </button>
+                <button onclick="switchStep(1)" id="nav-1" class="nav-btn flex items-center gap-2 px-4 py-2 rounded-lg transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.91A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.09L21 9"/></svg>
+                    <span class="font-medium">Sources</span>
+                    <span id="source-count-badge" class="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 rounded-full ml-1">4</span>
+                </button>
+                <button onclick="switchStep(2)" id="nav-2" class="nav-btn flex items-center gap-2 px-4 py-2 rounded-lg transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                    <span class="font-medium">Costs</span>
+                </button>
+            </div>
 
-  // --- Calculations ---
-  const results = useMemo(() => {
-    // 1. Calculate Allowances
-    const p2Allowance = p2Servers * PRICING.DEFENDER_P2_ALLOWANCE;
-    const totalDeductions = p2Allowance + freeData;
-    const billableDailyGB = Math.max(0, ingestion - totalDeductions);
-    
-    // 2. Monthly Ingestion Cost (PAYG)
-    const monthlyPAYG = billableDailyGB * PRICING.PAYG * 31;
+            <!-- Stats -->
+            <div class="hidden lg:flex items-center gap-6 border-l border-slate-800 pl-6">
+                <div class="text-right">
+                    <div class="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Daily Ingestion</div>
+                    <div id="stat-daily" class="text-lg font-mono font-bold text-blue-400">0.00 <span class="text-xs text-slate-600">GB</span></div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Est. Monthly</div>
+                    <div id="stat-cost" class="text-lg font-mono font-bold text-emerald-400">$0</div>
+                </div>
+            </div>
+        </div>
+    </header>
 
-    // 3. Find Best Commitment Tier
-    let bestTier = { label: 'Pay-As-You-Go', monthly: monthlyPAYG, daily: monthlyPAYG / 31 };
-    
-    PRICING.TIERS.forEach(tier => {
-      // Cost is tier daily rate + (excess GB * tier effective rate)
-      // Note: Commitment tiers usually bill excess at the same discounted rate
-      const effectivePerGB = tier.dailyCost / tier.minGB;
-      const dailyUsageInTier = Math.max(billableDailyGB, tier.minGB);
-      const dailyTierCost = tier.dailyCost + (Math.max(0, billableDailyGB - tier.minGB) * effectivePerGB);
-      const monthlyTierCost = dailyTierCost * 31;
-
-      if (monthlyTierCost < bestTier.monthly) {
-        bestTier = {
-          label: tier.label,
-          monthly: monthlyTierCost,
-          daily: dailyTierCost,
-          effectiveRate: effectivePerGB
-        };
-      }
-    });
-
-    // 4. Retention Cost
-    // 90 days (3 months) are free.
-    const billableRetentionMonths = Math.max(0, retentionMonths - 3);
-    const monthlyRetentionCost = billableDailyGB * 31 * billableRetentionMonths * PRICING.RETENTION_PER_GB_MONTH;
-
-    return {
-      billableDailyGB,
-      monthlyIngestion: bestTier.monthly,
-      monthlyRetention: monthlyRetentionCost,
-      totalMonthly: bestTier.monthly + monthlyRetentionCost,
-      savings: monthlyPAYG - bestTier.monthly,
-      recommendedTier: bestTier.label,
-      p2Allowance
-    };
-  }, [ingestion, retentionMonths, p2Servers, freeData]);
-
-  // --- Formatting Helpers ---
-  const currency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
-
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
+    <main class="max-w-7xl mx-auto p-6 md:p-8">
         
-        {/* Header */}
-        <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-indigo-900 flex items-center gap-2">
-              <ShieldCheck className="w-8 h-8 text-indigo-600" />
-              Sentinel Cost Calculator
-            </h1>
-            <p className="text-slate-500 mt-1">Estimate your Microsoft Sentinel monthly expenditure locally.</p>
-          </div>
-          <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Region</span>
-            <span className="text-sm font-medium">East US (Default)</span>
-          </div>
-        </header>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* Inputs Section */}
-          <div className="lg:col-span-5 space-y-6">
-            <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-4">
-                <Database className="w-5 h-5 text-indigo-500" />
-                <h2 className="font-semibold text-lg text-slate-800">Data Ingestion</h2>
-              </div>
-
-              <div>
-                <div className="flex justify-between mb-2">
-                  <label className="text-sm font-medium text-slate-700">Daily Ingestion (GB)</label>
-                  <span className="text-sm font-mono text-indigo-600 font-bold">{ingestion} GB</span>
+        <!-- STEP 0: SETUP -->
+        <div id="step-0" class="step-content space-y-8 animate-fade-in">
+            <section class="bg-slate-900/50 border border-slate-800 rounded-3xl p-8">
+                <div class="flex items-center gap-3 mb-8">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-500"><circle cx="12" cy="12" r="10"/><path d="m16.2 7.8-2 2"/><path d="M12 12s.01 0 0 0"/><path d="M4.5 16.5 6 15"/><path d="m15 15 4.5 4.5"/><path d="m21 12-2-2"/><path d="M5.9 5.9 9 9"/></svg>
+                    <h2 class="text-xl font-bold">Environment Configuration</h2>
                 </div>
-                <input 
-                  type="range" 
-                  min="1" 
-                  max="1000" 
-                  value={ingestion} 
-                  onChange={(e) => setIngestion(Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                />
-                <div className="mt-4 grid grid-cols-2 gap-4">
-                  <div className="relative">
-                    <input 
-                      type="number" 
-                      value={ingestion}
-                      onChange={(e) => setIngestion(Number(e.target.value))}
-                      className="w-full p-2 pl-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                    />
-                    <span className="absolute right-3 top-2 text-xs text-slate-400">GB/Day</span>
-                  </div>
-                </div>
-              </div>
 
-              <div>
-                <div className="flex justify-between mb-2">
-                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    Data Retention
-                  </label>
-                  <span className="text-sm font-mono text-indigo-600 font-bold">{retentionMonths} Months</span>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <div class="space-y-6">
+                        <div>
+                            <label class="text-sm font-semibold text-slate-400 mb-2 block">Number of Users</label>
+                            <input type="number" id="input-users" value="250" oninput="updateState('users', this.value)" class="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="text-sm font-semibold text-slate-400 mb-2 block">Endpoints</label>
+                            <input type="number" id="input-endpoints" value="250" oninput="updateState('endpoints', this.value)" class="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <label class="text-sm font-semibold text-slate-400 block">Target Azure Region</label>
+                        <div id="region-selector" class="grid grid-cols-1 gap-2">
+                            <!-- JS will inject regions -->
+                        </div>
+                    </div>
+
+                    <div id="e5-card" class="p-6 rounded-3xl border transition-all bg-indigo-600/10 border-indigo-500/50">
+                        <div class="flex items-center justify-between mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-400"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                            <button onclick="toggleE5()" id="e5-toggle" class="w-12 h-6 rounded-full relative transition-all bg-indigo-500">
+                                <div id="e5-knob" class="absolute top-1 w-4 h-4 bg-white rounded-full transition-all left-7"></div>
+                            </button>
+                        </div>
+                        <h3 class="font-bold mb-1">M365 E5 Security Grant</h3>
+                        <p class="text-xs text-slate-500 leading-relaxed">Includes 5MB/user/day for eligible security logs.</p>
+                        <div id="e5-stats" class="mt-4 pt-4 border-t border-indigo-500/20">
+                            <div class="text-xs font-bold text-indigo-400 uppercase tracking-tighter">Monthly Grant</div>
+                            <div id="e5-grant-val" class="text-xl font-mono font-bold text-white">0 GB</div>
+                        </div>
+                    </div>
                 </div>
-                <input 
-                  type="range" 
-                  min="1" 
-                  max="24" 
-                  value={retentionMonths} 
-                  onChange={(e) => setRetentionMonths(Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                />
-                <p className="text-[10px] text-slate-400 mt-2 italic">Note: First 90 days are included at no extra cost with Sentinel.</p>
-              </div>
             </section>
 
-            <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-4">
-                <ShieldCheck className="w-5 h-5 text-green-500" />
-                <h2 className="font-semibold text-lg text-slate-800">Entitlements & Benefits</h2>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-1">Defender for Servers P2 (Nodes)</label>
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex-1">
-                      <Server className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                      <input 
-                        type="number" 
-                        placeholder="0"
-                        value={p2Servers || ''}
-                        onChange={(e) => setP2Servers(Number(e.target.value))}
-                        className="w-full p-2 pl-10 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                      />
-                    </div>
-                    <div className="text-xs text-slate-500 bg-slate-100 p-2 rounded-lg border border-slate-200">
-                      -{results.p2Allowance.toFixed(1)} GB/day
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">Each server grants 500MB/day of free security data.</p>
+            <section class="bg-slate-900/50 border border-slate-800 rounded-3xl p-8">
+                <div class="flex items-center gap-3 mb-8">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-500"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                    <h2 class="text-xl font-bold">Infrastructure Workloads</h2>
                 </div>
-
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-1">Other Free Data (GB/day)</label>
-                  <input 
-                    type="number" 
-                    placeholder="0"
-                    value={freeData || ''}
-                    onChange={(e) => setFreeData(Number(e.target.value))}
-                    className="w-full p-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">e.g. Office 365 Audit Logs, Azure Activity Logs.</p>
+                <div id="infra-inputs" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- JS will inject infrastructure inputs -->
                 </div>
-              </div>
             </section>
-          </div>
 
-          {/* Results Section */}
-          <div className="lg:col-span-7 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-indigo-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
-                <div className="relative z-10">
-                  <p className="text-indigo-100 text-sm font-medium mb-1">Total Monthly Estimate</p>
-                  <h3 className="text-4xl font-bold">{currency(results.totalMonthly)}</h3>
-                  <div className="mt-4 flex items-center gap-2 text-xs bg-white/20 w-fit px-2 py-1 rounded-full">
-                    <TrendingDown className="w-3 h-3" />
-                    <span>Based on {results.recommendedTier}</span>
-                  </div>
-                </div>
-                <div className="absolute -right-4 -bottom-4 opacity-10">
-                  <Calculator size={120} />
-                </div>
-              </div>
-
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-                <p className="text-slate-500 text-sm font-medium mb-1">Billable Daily Data</p>
-                <h3 className="text-3xl font-bold text-slate-800">{results.billableDailyGB.toFixed(2)} <span className="text-lg font-normal text-slate-400">GB</span></h3>
-                <div className="mt-4 space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Gross Ingestion</span>
-                    <span className="text-slate-600">{ingestion} GB</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-green-500">Allowances</span>
-                    <span className="text-green-600">-{ (ingestion - results.billableDailyGB).toFixed(2) } GB</span>
-                  </div>
-                </div>
-              </div>
+            <div class="flex justify-end">
+                <button onclick="switchStep(1)" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-blue-600/20 flex items-center gap-2 group">
+                    Continue to Sources
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:translate-x-1 transition-transform"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
             </div>
-
-            <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-800 mb-6">Cost Breakdown</h3>
-              
-              <div className="space-y-6">
-                {/* Ingestion Row */}
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-                    <Database className="w-6 h-6" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center mb-1">
-                      <h4 className="font-semibold text-slate-700">Analytics Ingestion</h4>
-                      <span className="font-bold text-slate-900">{currency(results.monthlyIngestion)}</span>
-                    </div>
-                    <p className="text-sm text-slate-500">
-                      Calculated using the <span className="font-bold text-indigo-600">{results.recommendedTier}</span> tier. 
-                      This covers both Log Analytics and Sentinel analysis charges.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Retention Row */}
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-                    <Clock className="w-6 h-6" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center mb-1">
-                      <h4 className="font-semibold text-slate-700">Extended Retention</h4>
-                      <span className="font-bold text-slate-900">{currency(results.monthlyRetention)}</span>
-                    </div>
-                    <p className="text-sm text-slate-500">
-                      {retentionMonths > 3 
-                        ? `Cost for ${retentionMonths - 3} months of extra storage beyond the free 90-day window.`
-                        : "No extra charges (Included in free 90-day window)."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-100 pt-6 mt-6">
-                  <div className="bg-slate-50 rounded-2xl p-4 flex items-start gap-3">
-                    <Info className="w-5 h-5 text-slate-400 mt-0.5" />
-                    <div className="text-sm text-slate-600 leading-relaxed">
-                      <p className="font-medium text-slate-800 mb-1">Did you know?</p>
-                      Commitment tiers can save you up to 60% compared to Pay-As-You-Go rates.
-                      {results.savings > 0 ? (
-                        <span className="block mt-1 text-green-600 font-bold">
-                          We've applied a savings of {currency(results.savings)} by selecting a higher commitment tier for you.
-                        </span>
-                      ) : (
-                        <span className="block mt-1">
-                          At your current volume, Pay-As-You-Go is the most cost-effective option.
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Additional Info Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-5 rounded-2xl border border-dashed border-slate-300 flex items-center justify-between group hover:border-indigo-400 transition-colors cursor-help">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
-                    $
-                  </div>
-                  <div>
-                    <h5 className="text-sm font-semibold">Pre-Purchase Plan</h5>
-                    <p className="text-xs text-slate-400">Save an extra 10-25%</p>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-400" />
-              </div>
-
-              <div className="p-5 rounded-2xl border border-dashed border-slate-300 flex items-center justify-between group hover:border-indigo-400 transition-colors cursor-help">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
-                    <Info className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h5 className="text-sm font-semibold">Free Data Tables</h5>
-                    <p className="text-xs text-slate-400">List of exempt sources</p>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-400" />
-              </div>
-            </div>
-          </div>
-
         </div>
 
-        {/* Footer */}
-        <footer className="mt-12 text-center text-slate-400 text-xs py-8 border-t border-slate-200">
-          <p>Estimate based on standard simplified pricing for East US. Actual costs may vary by region and individual Azure agreements.</p>
-          <p className="mt-2">Simplified tiers include Log Analytics Ingestion + Microsoft Sentinel Analysis.</p>
-        </footer>
-      </div>
-    </div>
-  );
-};
+        <!-- STEP 1: SOURCES -->
+        <div id="step-1" class="step-content step-hidden space-y-8 animate-fade-in">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div class="lg:col-span-8">
+                    <h2 class="text-2xl font-bold flex items-center gap-2 mb-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-500"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
+                        Select Log Connectors
+                    </h2>
+                    <div id="sources-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- JS will inject source cards -->
+                    </div>
+                </div>
 
-export default App;
-m
+                <div class="lg:col-span-4">
+                    <div class="sticky top-28 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-6">
+                        <h3 class="font-bold text-lg">Strategy Summary</h3>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-end border-b border-slate-800 pb-4">
+                                <span class="text-sm text-slate-400">Monthly Volume</span>
+                                <span id="summary-gross" class="text-xl font-mono font-bold">0.0 GB</span>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex justify-between text-xs text-slate-500">
+                                    <span>Free Platform Logs</span>
+                                    <span id="summary-free" class="text-emerald-400">-0.0 GB</span>
+                                </div>
+                                <div class="flex justify-between text-xs text-slate-500">
+                                    <span>E5 Security Grant</span>
+                                    <span id="summary-grant" class="text-indigo-400">-0.0 GB</span>
+                                </div>
+                            </div>
+                            <div class="pt-4 mt-4 border-t border-slate-800">
+                                <div class="flex justify-between items-center mb-6">
+                                    <span class="font-bold text-slate-100">Billable Daily</span>
+                                    <span id="summary-billable" class="text-2xl font-mono font-bold text-blue-400">0.00 GB</span>
+                                </div>
+                                <button onclick="switchStep(2)" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-xl shadow-blue-500/20">
+                                    Analyze Final Costs
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 2: COSTS -->
+        <div id="step-2" class="step-content step-hidden space-y-8 animate-fade-in max-w-4xl mx-auto">
+            <div class="bg-gradient-to-br from-blue-900/40 to-slate-900 border border-blue-500/30 rounded-[3rem] p-10 md:p-16 text-center shadow-2xl relative overflow-hidden">
+                <div class="relative z-10">
+                    <div class="text-blue-400 text-xs font-bold uppercase tracking-[0.3em] mb-4">Final Cost Strategy</div>
+                    <h2 class="text-6xl md:text-8xl font-black text-white tracking-tighter mb-4">
+                        <span class="text-4xl align-top mr-1 font-bold opacity-40">$</span>
+                        <span id="final-cost">0</span>
+                    </h2>
+                    <div class="text-slate-400 font-medium text-lg">Per Month in <span id="final-region" class="text-blue-100">East US</span></div>
+                    
+                    <div class="mt-12 inline-flex flex-wrap justify-center gap-3">
+                        <div class="bg-white/5 border border-white/10 px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="m3 16 2 2 2-2"/><path d="M7 18V4"/><path d="m21 8-2-2-2 2"/><path d="M17 6v14"/></svg>
+                            Tier: <span id="final-tier">PAYG</span>
+                        </div>
+                        <div class="bg-white/5 border border-white/10 px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-400"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
+                            <span id="final-billable">0.0</span> GB Billable
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-slate-900 border border-slate-800 p-8 rounded-3xl">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase mb-4 tracking-widest">Commitment Savings</h4>
+                    <div id="savings-val" class="text-3xl font-bold text-emerald-400 mb-1">$0</div>
+                    <p class="text-xs text-slate-500">Relative to PAYG.</p>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 p-8 rounded-3xl">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase mb-4 tracking-widest">Region Modifier</h4>
+                    <div id="multiplier-val" class="text-3xl font-bold text-white mb-1">x1.00</div>
+                    <p class="text-xs text-slate-500">Regional price uplift.</p>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 p-8 rounded-3xl">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase mb-4 tracking-widest">Free Allowance</h4>
+                    <div id="allowance-val" class="text-3xl font-bold text-indigo-400 mb-1">0.0 GB</div>
+                    <p class="text-xs text-slate-500">Total monthly deductions.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="mt-20 py-12 px-6 border-t border-slate-900 bg-slate-950">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8 opacity-40 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-700">
+           <div class="flex items-center gap-2">
+             <span class="font-bold text-sm tracking-tighter uppercase">Sentinel Strategy Engine</span>
+           </div>
+           <p class="text-xs text-center md:text-left max-w-md">Modeling tool for Microsoft Sentinel planning. Actual costs depend on EA agreements and specific data types.</p>
+           <div class="text-[10px] uppercase font-bold tracking-widest">© 2026 LockBase Logic Framework</div>
+        </div>
+    </footer>
+
+    <script>
+        // DATA
+        const REGIONS = [
+            { id: 'eastus', name: 'East US', multiplier: 1.0, label: 'Baseline' },
+            { id: 'eastus2', name: 'East US 2', multiplier: 1.11, label: '+11%' },
+            { id: 'centralus', name: 'Central US', multiplier: 1.05, label: '+5%' },
+            { id: 'westus', name: 'West US', multiplier: 1.30, label: '+30%' },
+            { id: 'northeurope', name: 'North Europe', multiplier: 1.15, label: '+15%' },
+            { id: 'uksouth', name: 'UK South', multiplier: 1.18, label: '+18%' },
+            { id: 'brazilsouth', name: 'Brazil South', multiplier: 1.40, label: '+40%' },
+            { id: 'japaneast', name: 'Japan East', multiplier: 1.25, label: '+25%' },
+        ];
+
+        const LOG_SOURCES = [
+            { id: 'azure_act', name: 'Azure Activity Log', type: 'Platform', free: true, baseVol: 0.05 },
+            { id: 'dfc', name: 'Defender for Cloud', type: 'Security', free: true, baseVol: 0.02 },
+            { id: 'o365', name: 'Office 365 Management', type: 'SaaS', free: true, baseVol: 0.1 },
+            { id: 'entra', name: 'Microsoft Entra ID', type: 'Identity', free: false, scalesWith: 'users', multiplier: 0.002 },
+            { id: 'win_sec', name: 'Windows Security Events', type: 'Endpoint', free: false, scalesWith: 'servers', multiplier: 0.5 },
+            { id: 'syslog', name: 'Linux Syslog', type: 'Endpoint', free: false, scalesWith: 'servers', multiplier: 0.3 },
+            { id: 'fw', name: 'Firewall (Palo/Forti)', type: 'Network', free: false, scalesWith: 'networkAssets', multiplier: 0.05 },
+            { id: 'nsg_flow', name: 'Azure NSG Flow Logs', type: 'Network', free: false, scalesWith: 'nsgs', multiplier: 1.5 },
+            { id: 'vnet_flow', name: 'Azure VNet Flow Logs', type: 'Network', free: false, scalesWith: 'vnets', multiplier: 3.0 },
+            { id: 'aws', name: 'AWS CloudTrail', type: 'Cloud', free: false, scalesWith: 'awsAccounts', multiplier: 0.2 },
+            { id: 'k8s', name: 'Kubernetes Nodes', type: 'Container', free: false, scalesWith: 'k8sNodes', multiplier: 1.0 },
+        ];
+
+        const COMMITMENT_TIERS = [
+            { minGB: 0, label: "PAYG", baseDaily: 0 },
+            { minGB: 50, label: "50 GB/day", baseDaily: 161 },
+            { minGB: 100, label: "100 GB/day", baseDaily: 296 },
+            { minGB: 200, label: "200 GB/day", baseDaily: 548 },
+            { minGB: 300, label: "300 GB/day", baseDaily: 800 },
+            { minGB: 400, label: "400 GB/day", baseDaily: 1037 },
+            { minGB: 500, label: "500 GB/day", baseDaily: 1265 },
+        ];
+
+        // STATE
+        let state = {
+            activeStep: 0,
+            regionId: 'eastus',
+            users: 250,
+            endpoints: 250,
+            servers: 20,
+            networkAssets: 100,
+            awsAccounts: 0,
+            nsgs: 0,
+            vnets: 0,
+            k8sNodes: 0,
+            hasE5Grant: true,
+            selectedSources: ['azure_act', 'dfc', 'o365', 'entra']
+        };
+
+        // CORE LOGIC
+        function calculate() {
+            const region = REGIONS.find(r => r.id === state.regionId);
+            let totalDaily = 0;
+            let freeDaily = 0;
+
+            state.selectedSources.forEach(sid => {
+                const src = LOG_SOURCES.find(s => s.id === sid);
+                if (!src) return;
+                let vol = src.scalesWith ? (state[src.scalesWith] * src.multiplier) : src.baseVol;
+                totalDaily += vol;
+                if (src.free) freeDaily += vol;
+            });
+
+            const e5Grant = state.hasE5Grant ? (state.users * 0.005) : 0;
+            const billableDaily = Math.max(0, totalDaily - freeDaily - e5Grant);
+
+            // Cost optimization
+            const paygRate = 4.30 * region.multiplier;
+            let bestMonthly = billableDaily * paygRate * 31;
+            let bestTier = "Pay-As-You-Go";
+
+            COMMITMENT_TIERS.forEach(tier => {
+                if (tier.minGB === 0) return;
+                const tierDaily = (tier.baseDaily * region.multiplier) + (Math.max(0, billableDaily - tier.minGB) * (tier.baseDaily / tier.minGB) * region.multiplier);
+                const tierMonthly = tierDaily * 31;
+                if (tierMonthly < bestMonthly) {
+                    bestMonthly = tierMonthly;
+                    bestTier = tier.label;
+                }
+            });
+
+            return {
+                totalDaily,
+                freeDaily,
+                e5Grant,
+                billableDaily,
+                bestTier,
+                bestMonthly,
+                region,
+                savings: (billableDaily * paygRate * 31) - bestMonthly
+            };
+        }
+
+        // DOM UPDATES
+        function render() {
+            const results = calculate();
+
+            // Header Stats
+            document.getElementById('stat-daily').innerHTML = `${results.totalDaily.toFixed(2)} <span class="text-xs text-slate-600">GB</span>`;
+            document.getElementById('stat-cost').innerText = `$${Math.round(results.bestMonthly).toLocaleString()}`;
+            document.getElementById('source-count-badge').innerText = state.selectedSources.length;
+
+            // Step Visibility
+            document.querySelectorAll('.step-content').forEach((el, idx) => {
+                el.classList.toggle('step-hidden', idx !== state.activeStep);
+            });
+
+            // Nav Highlighting
+            document.querySelectorAll('.nav-btn').forEach((btn, idx) => {
+                if (idx === state.activeStep) {
+                    btn.className = "nav-btn flex items-center gap-2 px-4 py-2 rounded-lg transition-all border bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20";
+                } else {
+                    btn.className = "nav-btn flex items-center gap-2 px-4 py-2 rounded-lg transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-white";
+                }
+            });
+
+            // Step 0 - Regions
+            const regSel = document.getElementById('region-selector');
+            if (regSel.children.length === 0) {
+                REGIONS.forEach(r => {
+                    const btn = document.createElement('button');
+                    btn.id = `reg-btn-${r.id}`;
+                    btn.onclick = () => { state.regionId = r.id; render(); };
+                    btn.className = "flex items-center justify-between p-3 rounded-xl border transition-all";
+                    btn.innerHTML = `<span class="text-sm font-medium">${r.name}</span><span class="text-[10px] font-bold opacity-60 uppercase">${r.label}</span>`;
+                    regSel.appendChild(btn);
+                });
+            }
+            REGIONS.forEach(r => {
+                const btn = document.getElementById(`reg-btn-${r.id}`);
+                btn.className = (state.regionId === r.id) 
+                    ? "flex items-center justify-between p-3 rounded-xl border transition-all bg-blue-600/10 border-blue-500 text-blue-100"
+                    : "flex items-center justify-between p-3 rounded-xl border transition-all bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500";
+            });
+
+            // Step 0 - E5 UI
+            document.getElementById('e5-toggle').className = state.hasE5Grant ? "w-12 h-6 rounded-full relative transition-all bg-indigo-500" : "w-12 h-6 rounded-full relative transition-all bg-slate-700";
+            document.getElementById('e5-knob').className = state.hasE5Grant ? "absolute top-1 w-4 h-4 bg-white rounded-full transition-all left-7" : "absolute top-1 w-4 h-4 bg-white rounded-full transition-all left-1";
+            document.getElementById('e5-card').className = state.hasE5Grant ? "p-6 rounded-3xl border transition-all bg-indigo-600/10 border-indigo-500/50" : "p-6 rounded-3xl border transition-all bg-slate-900 border-slate-800 opacity-60";
+            document.getElementById('e5-grant-val').innerText = `${(results.e5Grant * 31).toFixed(1)} GB`;
+
+            // Step 1 - Sources Grid
+            const grid = document.getElementById('sources-grid');
+            if (grid.children.length === 0) {
+                LOG_SOURCES.forEach(s => {
+                    const btn = document.createElement('button');
+                    btn.id = `src-btn-${s.id}`;
+                    btn.onclick = () => toggleSource(s.id);
+                    grid.appendChild(btn);
+                });
+            }
+            LOG_SOURCES.forEach(s => {
+                const btn = document.getElementById(`src-btn-${s.id}`);
+                const isSel = state.selectedSources.includes(s.id);
+                const vol = s.scalesWith ? (state[s.scalesWith] * s.multiplier) : s.baseVol;
+                btn.className = isSel 
+                    ? "text-left p-5 rounded-3xl border transition-all bg-blue-600/10 border-blue-500/50 shadow-md relative"
+                    : "text-left p-5 rounded-3xl border transition-all bg-slate-900 border-slate-800 hover:border-slate-600 relative opacity-80";
+                btn.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase">${s.type}</span>
+                        <span class="text-[10px] font-bold uppercase ${s.free ? 'text-emerald-400' : 'text-blue-400'}">${s.free ? 'Free' : 'Paid'}</span>
+                    </div>
+                    <h4 class="font-bold text-slate-100 mb-1">${s.name}</h4>
+                    <div class="text-xs text-slate-500">~${vol.toFixed(2)} GB/day</div>
+                `;
+            });
+
+            // Step 1 - Summary Sidebar
+            document.getElementById('summary-gross').innerText = `${(results.totalDaily * 31).toFixed(1)} GB`;
+            document.getElementById('summary-free').innerText = `-${(results.freeDaily * 31).toFixed(1)} GB`;
+            document.getElementById('summary-grant').innerText = `-${(results.e5Grant * 31).toFixed(1)} GB`;
+            document.getElementById('summary-billable').innerText = `${results.billableDaily.toFixed(2)} GB`;
+
+            // Step 2 - Final Results
+            document.getElementById('final-cost').innerText = Math.round(results.bestMonthly).toLocaleString();
+            document.getElementById('final-region').innerText = results.region.name;
+            document.getElementById('final-tier').innerText = results.bestTier;
+            document.getElementById('final-billable').innerText = results.billableDaily.toFixed(1);
+            document.getElementById('savings-val').innerText = `$${Math.round(results.savings).toLocaleString()}`;
+            document.getElementById('multiplier-val').innerText = `x${results.region.multiplier.toFixed(2)}`;
+            document.getElementById('allowance-val').innerText = `${((results.freeDaily + results.e5Grant) * 31).toFixed(1)} GB`;
+        }
+
+        // ACTIONS
+        function updateState(key, val) {
+            state[key] = Math.max(0, parseInt(val) || 0);
+            render();
+        }
+
+        function toggleE5() {
+            state.hasE5Grant = !state.hasE5Grant;
+            render();
+        }
+
+        function toggleSource(id) {
+            if (state.selectedSources.includes(id)) {
+                state.selectedSources = state.selectedSources.filter(x => x !== id);
+            } else {
+                state.selectedSources.push(id);
+            }
+            render();
+        }
+
+        function switchStep(idx) {
+            state.activeStep = idx;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            render();
+        }
+
+        // INITIALIZATION
+        function init() {
+            // Build infra inputs
+            const infraContainer = document.getElementById('infra-inputs');
+            const fields = [
+                { k: 'servers', l: 'Servers (On-Prem/VM)' },
+                { k: 'networkAssets', l: 'Network Assets' },
+                { k: 'awsAccounts', l: 'AWS Accounts' },
+                { k: 'nsgs', l: 'Azure NSGs' },
+                { k: 'vnets', l: 'Azure VNets' },
+                { k: 'k8sNodes', l: 'K8s Nodes' }
+            ];
+            fields.forEach(f => {
+                const div = document.createElement('div');
+                div.className = "bg-slate-800/40 border border-slate-700/50 p-4 rounded-2xl";
+                div.innerHTML = `
+                    <label class="text-xs font-bold text-slate-400 uppercase tracking-tighter block mb-2">${f.l}</label>
+                    <input type="number" value="${state[f.k]}" oninput="updateState('${f.k}', this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-blue-500 outline-none font-mono">
+                `;
+                infraContainer.appendChild(div);
+            });
+            render();
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,90 @@
+// ==============================================
+// GOAL:
+// Elevate alerts when multiple user-submitted email reports share common entities
+// (e.g., same sender, domain, IP, or subject), indicating potential malicious campaigns.
+// ==============================================
+//
+// --------------------------
+// Define threshold for correlation
+// --------------------------
+let threshold = 3; // Minimum number of distinct reports required to consider an entity suspicious
+//
+// --------------------------
+// Extract relevant fields from CloudAppEvents for user-submitted reports
+// --------------------------
+let reportEvents = CloudAppEvents
+    | where ActionType == "UserSubmission" // Focus only on user-submitted phishing/malicious email reports
+    | extend 
+        // Parse key email attributes from RawEventData JSON using regex
+        InternetMessageId = extract("InternetMessageId\":\"([^\"]+)", 1, tostring(RawEventData)),
+        P1Sender          = extract("P1Sender\":\"([^\"]+)", 1, tostring(RawEventData)),        // Primary sender address
+        P1SenderDomain    = extract("P1SenderDomain\":\"([^\"]+)", 1, tostring(RawEventData)),  // Primary sender domain
+        P2Sender          = extract("P2Sender\":\"([^\"]+)", 1, tostring(RawEventData)),        // Secondary sender (if present)
+        P2SenderDomain    = extract("P2SenderDomain\":\"([^\"]+)", 1, tostring(RawEventData)),  // Secondary sender domain
+        SenderIP          = extract("SenderIP\":\"([^\"]+)", 1, tostring(RawEventData)),        // Source IP of email
+        Subject           = extract("Subject\":\"([^\"]+)", 1, tostring(RawEventData)),         // Email subject line
+        UserId            = extract("UserId\":\"([^\"]+)", 1, tostring(RawEventData))           // Reporting user
+    | project
+        // Keep only relevant columns for correlation and alerting
+        TimeGenerated,
+        ReportId,
+        InternetMessageId,
+        P1Sender,
+        P1SenderDomain,
+        P2Sender,
+        P2SenderDomain,
+        SenderIP,
+        Subject,
+        UserId;
+//
+// --------------------------
+// Identify entities reported at least 'threshold' times
+// Each block below aggregates by entity type and filters for suspicious frequency
+// --------------------------
+//
+// Sender IP correlation
+let _SenderIP = reportEvents
+    | summarize Count = count_distinct(ReportId) by SenderIP
+    | where Count >= threshold
+    | project SenderIP;
+//
+// Primary sender address correlation
+let _P1Sender = reportEvents
+    | summarize Count = count_distinct(ReportId) by P1Sender
+    | where Count > threshold
+    | project P1Sender;
+//
+// Primary sender domain correlation
+let _P1SenderDomain = reportEvents
+    | summarize Count = count_distinct(ReportId) by P1SenderDomain
+    | where Count > threshold
+    | project P1SenderDomain;
+//
+// Secondary sender correlation
+let _P2Sender = reportEvents
+    | summarize Count = count_distinct(ReportId) by P2Sender
+    | where Count > threshold
+    | project P2Sender;
+//
+// Secondary sender domain correlation
+let _P2SenderDomain = reportEvents
+    | summarize Count = count_distinct(ReportId) by P2SenderDomain
+    | where Count > threshold
+    | project P2SenderDomain;
+//
+// Subject line correlation
+let _Subject = reportEvents
+    | summarize Count = count_distinct(ReportId) by Subject
+    | where Count > threshold
+    | project Subject;
+//
+// --------------------------
+// Final join: flag reports that match any suspicious entity
+// --------------------------
+reportEvents
+    | where SenderIP has_any (_SenderIP) or 
+           P1Sender has_any (_P1Sender) or
+           P1SenderDomain has_any (_P1SenderDomain) or 
+           P2Sender has_any (_P2Sender) or
+           P2SenderDomain has_any (_P2SenderDomain) or 
+           Subject has_any (_Subject)

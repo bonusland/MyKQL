@@ -1,0 +1,20 @@
+union AADNonInteractiveUserSignInLogs, SigninLogs
+  | where OriginalTransferMethod == "deviceCodeFlow" and ClientAppUsed == "Mobile Apps and Desktop clients"
+  | where Status_string has "0" or Status_string has "50199"
+  | where isnotempty(UserId)
+  | where isnotempty(IPAddress)
+  | where isnotempty(Location)
+  | where isnotempty(UserAgent)
+  | where isnotempty(SessionId)
+  | extend StatusJson = parse_json(Status_string)
+  | extend errorCode = tostring(StatusJson.errorCode)
+  | extend LocationJson = parse_json(LocationDetails_string)
+  | extend countryOrRegion = tostring(LocationJson.countryOrRegion)
+  | summarize
+    set_errorCodes = make_set(errorCode),
+    set_userAgent = make_set(UserAgent),
+    set_location_countryOrRegion = make_set(countryOrRegion),
+    max_createdDateTime = max(CreatedDateTime)
+  by SessionId, UserId, UserPrincipalName, IPAddress
+  | where array_length(set_errorCodes) == 2
+      and (array_length(set_userAgent) == 2 or array_length(set_location_countryOrRegion) == 2)

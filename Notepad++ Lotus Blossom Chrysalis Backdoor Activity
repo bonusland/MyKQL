@@ -1,0 +1,38 @@
+let timeframe = 30d;
+// Detect the specific execution chain from the Notepad++ compromise.
+let ExecutionChain =
+    DeviceProcessEvents
+    | where Timestamp > ago(timeframe)
+    | where FileName =~ "update.exe" and InitiatingProcessFileName =~ "GUP.exe"
+    | join kind=inner (
+        DeviceProcessEvents
+        | where Timestamp > ago(timeframe)
+        | where FileName =~ "GUP.exe" and InitiatingProcessFileName =~ "notepad++.exe"
+    ) on $left.InitiatingProcessParentId == $right.ProcessId
+    | extend
+        ActivityType = "Suspicious Execution Chain",
+        SuspiciousProcess = FileName,
+        ParentProcess = InitiatingProcessFileName,
+        GrandparentProcess = InitiatingProcessFileName1
+    | project Timestamp, DeviceName, ActivityType, SuspiciousProcess, ParentProcess, GrandparentProcess, ProcessCommandLine, InitiatingProcessCommandLine;
+let SideLoading =
+    DeviceImageLoadEvents
+    | where Timestamp > ago(timeframe)
+    // Look for the renamed Bitdefender binary loading the malicious DLL.
+    | where InitiatingProcessFileName =~ "BluetoothService.exe" and FileName =~ "log.dll"
+    | extend
+        ActivityType = "DLL Side-Loading",
+        SuspiciousProcess = InitiatingProcessFileName,
+        LoadedModule = FileName
+    | project Timestamp, DeviceName, ActivityType, SuspiciousProcess, LoadedModule, InitiatingProcessCommandLine;
+// Detect network connections to known C2 or malware download infrastructure.
+let NetworkIOCs =
+    DeviceNetworkEvents
+    | where Timestamp > ago(timeframe)
+    | where RemoteUrl has "api.skycloudcenter.com" or RemoteIP == "95.179.213.0"
+    | extend
+        ActivityType = "Malicious Network Connection (IOC)",
+        SuspiciousProcess = InitiatingProcessFileName
+    | project Timestamp, DeviceName, ActivityType, SuspiciousProcess, InitiatingProcessCommandLine, RemoteUrl, RemoteIP;
+// Combine results from all detection methods.
+union isfuzzy=true ExecutionChain, SideLoading, NetworkIOCs

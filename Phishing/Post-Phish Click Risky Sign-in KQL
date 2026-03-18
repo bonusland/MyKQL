@@ -1,0 +1,20 @@
+// Detection: Post-Phish Click Risky Sign-in
+// Author: zendannyy
+// Description: Correlates an email URL click with a subsequent risky sign-in from the same user within a short timeframe.
+// This pattern is a strong indicator of a successful Adversary-in-the-Middle (AiTM) phishing attack, such as those conducted with the Tycoon2FA kit, where a user is tricked into authenticating through a malicious site, allowing the attacker to capture their session.
+
+let click_events = UrlClickEvents
+| where TimeGenerated > ago(1h)
+| where OperationName == "ClickAllowed"
+| extend UserName = tostring(InitiatedBy.user.userPrincipalName)
+| project ClickTime = TimeGenerated, UserName, ClientIP = tostring(InitiatedBy.user.ipAddress);
+let signin_events = SigninLogs
+| where TimeGenerated > ago(1h)
+| where RiskLevelDuringSignIn in ("medium", "high")
+| extend UserName = tostring(UserPrincipalName)
+| project SignInTime = TimeGenerated, UserName, ClientIP = tostring(IPAddress);
+click_events
+| join kind=inner (signin_events) on UserName
+| where SignInTime >= ClickTime and SignInTime <= (ClickTime + 1h)
+| project ClickTime, SignInTime, UserName, ClickClientIP = ClientIP, SignInClientIP = ClientIP
+| order by ClickTime asc

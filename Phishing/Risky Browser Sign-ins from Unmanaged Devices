@@ -1,0 +1,13 @@
+// Rule: Tycoon2FA Risky Browser Sign-ins
+// Author: Daniel Jeremiah
+// Date: 2026-03-07
+// Description:
+// This hunt looks for risky browser sign-ins from unmanaged devices, which fits the kind of account access pattern discussed in the Tycoon2FA report. It is not a full proof of phishing by itself, but it is a useful lead for checking whether browser-based sign-ins are showing the same shape as an AiTM compromise. In plain language, this query asks whether an account may have signed in through a suspicious browser session from a device that does not look known or trusted.
+
+AADSignInEventsBeta
+| where Timestamp > ago(7d)
+| where RiskLevelDuringSignIn in (50, 100)
+| where ClientAppUsed == "Browser"
+| where isempty(DeviceTrustType)
+| where isempty(DeviceName)
+| project Timestamp, AccountDisplayName, AccountUpn, IPAddress, Browser, Application, RiskLevelDuringSignIn

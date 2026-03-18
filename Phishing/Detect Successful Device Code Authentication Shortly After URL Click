@@ -1,0 +1,59 @@
+// Time window to search
+let TimeRange = 1h;
+// Max time between URL click and device code auth
+let MaxIntervalMinutes = 30;
+// 1) URL clicks from Defender for Office 365
+let UrlClicks = UrlClickEvents
+| where TimeGenerated >= ago(TimeRange)
+| project
+    UrlClickTime = TimeGenerated,
+    AccountUpn,
+    Url,
+    ActionType,
+    NetworkMessageId;
+// 2) Azure AD sign-ins where auth flow contain device code authentication
+let DeviceCodeSignins = SigninLogs
+| where TimeGenerated >= ago(TimeRange)
+| where AuthenticationProtocol == "deviceCode"
+| where isempty( tostring(DeviceDetail.deviceId))
+| extend operatingSystem = tostring(DeviceDetail.operatingSystem)
+| project
+    DeviceCodeSigninTime = TimeGenerated,
+    UserPrincipalName,
+    ResultSignature,
+    IPAddress,
+    AppDisplayName,
+    ResourceDisplayName,
+    ClientAppUsed,
+    operatingSystem,
+    UserAgent,
+    AuthenticationProtocol,
+    SessionId,
+    CorrelationId;
+// 3) Join URL click to device code auth by user and time proximity
+UrlClicks
+| join kind=innerunique (
+    DeviceCodeSignins
+) on $left.AccountUpn == $right.UserPrincipalName
+| where DeviceCodeSigninTime >= UrlClickTime
+    and DeviceCodeSigninTime <= UrlClickTime + totimespan(strcat(MaxIntervalMinutes, "m"))
+// 4) Final projection
+| project
+    Timestamp = DeviceCodeSigninTime,
+    UserPrincipalName,
+    UrlClickTime,
+    DeviceCodeSigninTime,
+    TimeDiffMinutes = datetime_diff("minute", DeviceCodeSigninTime, UrlClickTime),
+    ResultSignature,
+    Url,
+    UrlActionType = ActionType,
+    AppDisplayName,
+    ResourceDisplayName,
+    ClientAppUsed,
+    IPAddress,
+    AuthenticationProtocol,
+    operatingSystem,
+    SessionId,
+    CorrelationId,
+    NetworkMessageId
+| order by Timestamp desc

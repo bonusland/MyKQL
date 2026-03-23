@@ -1,0 +1,16 @@
+let trivy_processes = (
+    Event
+    | where EventType == "ProcessRollup2" or EventType == "FileCreate"
+    | where ImageFileName matches regex @"trivy(\.exe)?" or FileName matches regex @"trivy(\.exe)?" or CommandLine contains "trivy"
+    | project TimeGenerated, ComputerName, EventType, UserName, ImageFileName, FileName, CommandLine, FilePath, TargetProcessId = ProcessId
+);
+let network_connections = (
+    Event
+    | where EventType == "NetworkConnectIP4"
+    | where IP4Records == "45.148.10.212" or DomainName matches regex @"scan\.aquasecurity\.org"
+    | project ContextProcessId = ProcessId, IP4Records, RemotePort
+);
+trivy_processes
+| join kind=inner (network_connections) on $left.TargetProcessId == $right.ContextProcessId
+| project TimeGenerated, ComputerName, EventType, UserName, ImageFileName, FileName, CommandLine, FilePath, IP4Records, RemotePort
+| limit 1000

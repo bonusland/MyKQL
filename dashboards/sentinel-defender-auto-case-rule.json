@@ -1,0 +1,57 @@
+{
+  "rule_id": "sentinel-defender-auto-case",
+  "name": "Correlated Sentinel + Defender Alerts (Auto Case)",
+  "description": "Automatically creates a case when Microsoft Sentinel and Defender alerts correlate on the same host within 60 minutes.",
+  "risk_score": 75,
+  "severity": "high",
+  "type": "threshold",
+  "index": [
+    "security-alerts-*"
+  ],
+  "query": "(event.provider:(\"Microsoft Sentinel\" or \"Microsoft Defender for Endpoint\")) and event.severity >= 3 and host.id:*",
+  "threshold": {
+    "field": "host.id",
+    "value": 2
+  },
+  "timeframe": "60m",
+  "timestamp_override": "@timestamp",
+  "tags": [
+    "sentinel",
+    "defender",
+    "correlation",
+    "auto-case"
+  ],
+  "from": "now-65m",
+  "interval": "5m",
+  "enabled": true,
+  "building_block_type": "default",
+  "actions": [
+    {
+      "group": "threshold_met",
+      "id": "create-case-action",
+      "params": {
+        "subAction": "create",
+        "subActionParams": {
+          "title": "Correlated Sentinel + Defender alerts on {{context.group}}",
+          "description": "This case was automatically created due to correlated alerts from Microsoft Sentinel and Microsoft Defender.\n\nHost ID: {{context.group}}\nTime window: {{context.date.start}} – {{context.date.end}}\n\nAttached alerts represent multiple providers firing on the same entity.",
+          "tags": [
+            "sentinel",
+            "defender",
+            "auto-correlated"
+          ],
+          "severity": "high",
+          "assignees": []
+        }
+      }
+    }
+  ],
+  "alert_suppression": {
+    "group_by": [
+      "host.id"
+    ],
+    "duration": {
+      "value": 24,
+      "unit": "h"
+    }
+  }
+}

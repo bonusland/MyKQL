@@ -1,0 +1,70 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workspace": {
+            "type": "String"
+        }
+    },
+    "resources": [
+        {
+            "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/40483fce-7475-49db-8827-49ed9fff91fd')]",
+            "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/40483fce-7475-49db-8827-49ed9fff91fd')]",
+            "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+            "kind": "Scheduled",
+            "apiVersion": "2023-12-01-preview",
+            "properties": {
+                "displayName": "Connection to a custom network indicator",
+                "description": "#DONT_CORR#",
+                "severity": "Low",
+                "enabled": false,
+                "query": "// Time window the rule runs over — the rule schedule will control this,\n// but keeping a filter here protects against accidental long scans.\nSecurityAlert\n| where TimeGenerated >= ago(48h)\n// Defender’s built‑in title for custom network IOC matches:\n| where AlertName == \"Connection to a custom network indicator\"\n// Unpack the Entities array Microsoft includes with each alert\n| extend EntitiesJson = todynamic(Entities)\n| mv-expand EntitiesJson\n| extend EntityType = tostring(EntitiesJson[\"Type\"]),\n         Url        = tostring(EntitiesJson[\"Url\"]),\n         Domain     = tostring(EntitiesJson[\"DomainName\"]),\n         Ip         = tostring(EntitiesJson[\"Address\"])\n// Choose a single comparable indicator from URL/Domain/IP\n| extend IndicatorRaw = coalesce(Url, Domain, Ip)\n| where isnotempty(IndicatorRaw)\n// Normalize URLs for readability (strip scheme and trailing slash)\n| extend Indicator = iff(\n        EntityType == \"url\",\n        trim_end(@\"/\", replace_string(IndicatorRaw, @\"^https?://\", \"\")),\n        IndicatorRaw\n    )\n// Shape the alert payload your custom rule will emit\n| project\n    TimeGenerated,\n    ProductName,        // originating product name in the ingested alert\n    AlertName,          // original Defender alert title (for reference)\n    SystemAlertId,      // handy if you later PATCH Graph alerts_v2\n    AlertLink,          // link back to the source alert\n    CompromisedEntity,  // often the device or user\n    Indicator,          // the URL/Domain/IP we extracted\n    Entities,           // keep raw entities for entity mapping\n    ExtendedProperties\n",
+                "queryFrequency": "PT5M",
+                "queryPeriod": "PT5H",
+                "triggerOperator": "GreaterThan",
+                "triggerThreshold": 0,
+                "suppressionDuration": "PT5H",
+                "suppressionEnabled": false,
+                "startTimeUtc": null,
+                "tactics": [],
+                "techniques": [],
+                "subTechniques": [],
+                "alertRuleTemplateName": null,
+                "incidentConfiguration": {
+                    "createIncident": true,
+                    "groupingConfiguration": {
+                        "enabled": false,
+                        "reopenClosedIncident": false,
+                        "lookbackDuration": "PT5H",
+                        "matchingMethod": "AllEntities",
+                        "groupByEntities": [],
+                        "groupByAlertDetails": [],
+                        "groupByCustomDetails": []
+                    }
+                },
+                "eventGroupingSettings": {
+                    "aggregationKind": "SingleAlert"
+                },
+                "alertDetailsOverride": {
+                    "alertDisplayNameFormat": "IOC Match (Defender) – {{Indicator}}",
+                    "alertDescriptionFormat": "IOC Match (Defender) – {{Indicator}}",
+                    "alertDynamicProperties": []
+                },
+                "customDetails": {},
+                "entityMappings": [
+                    {
+                        "entityType": "URL",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Url",
+                                "columnName": "Indicator"
+                            }
+                        ]
+                    }
+                ],
+                "sentinelEntitiesMappings": null,
+                "templateVersion": null
+            }
+        }
+    ]
+}

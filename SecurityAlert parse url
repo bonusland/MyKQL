@@ -1,0 +1,7 @@
+SecurityAlert
+| where AlertName == @"Connection to a custom network indicator"
+| extend Extprop = parse_json(Entities)
+| mv-expand entity = Extprop
+| where isnotempty(entity["$id"])   // remove $ref rows
+| where entity.Type == "url"
+| project AlertName, Url = entity.Url, CompromisedEntity

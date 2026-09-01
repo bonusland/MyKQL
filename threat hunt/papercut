@@ -1,0 +1,66 @@
+// Multi-signal correlation: PaperCut exploitation indicators
+let timeWindow = 1h;
+let PaperCutChildProcs =
+    DeviceProcessEvents
+    | where Timestamp > ago(7d)
+    | where InitiatingProcessFileName in~ ("pc-app.exe", "pc-server.exe")
+    | where FileName in~ ("cmd.exe", "powershell.exe", "pwsh.exe",
+                           "whoami.exe", "tasklist.exe", "net.exe",
+                           "systeminfo.exe", "certutil.exe")
+    | summarize ChildProcCount = count(),
+                ChildProcs = make_set(FileName),
+                FirstChild = min(Timestamp)
+                by DeviceName;
+let LogTampering =
+    DeviceFileEvents
+    | where Timestamp > ago(7d)
+    | where ActionType in ("FileDeleted", "FileRenamed")
+    | where FileName =~ "server.log"
+    | where FolderPath has_any ("PaperCut", "papercut")
+    | summarize LogTamperCount = count(), FirstTamper = min(Timestamp)
+              by DeviceName;
+let RATActivity =
+    DeviceProcessEvents
+    | where Timestamp > ago(7d)
+    | where FileName in~ ("AnyDesk.exe", "TeamViewer.exe", "ScreenConnect.ClientService.exe")
+    | summarize RATCount = count(), FirstRAT = min(Timestamp)
+              by DeviceName;
+PaperCutChildProcs
+| join kind=leftouter LogTampering on DeviceName
+| join kind=leftouter RATActivity on DeviceName
+| extend ThreatScore = ChildProcCount
+    + iff(isnotempty(LogTamperCount), 10, 0)
+    + iff(isnotempty(RATCount), 10, 0)
+| where ThreatScore >= 3
+| project DeviceName, ThreatScore,
+          ChildProcCount, ChildProcs,
+          LogTamperCount, RATCount,
+          FirstChild, FirstTamper, FirstRAT
+| sort by ThreatScore desc
+
+// PaperCut Server spawning suspicious child processes
+// Covers: post-exploitation recon (whoami, tasklist, net, systeminfo)
+//         shell access (cmd, powershell)
+//         LOLBins (certutil, bitsadmin, mshta, wscript, cscript)
+//         RAT installers (AnyDesk, TeamViewer)
+DeviceProcessEvents
+| where Timestamp > ago(7d)
+| where InitiatingProcessFileName in~ ("pc-app.exe", "pc-server.exe")
+    or InitiatingProcessCommandLine has_any ("PaperCut", "papercut")
+| where FileName in~ (
+    // Shells
+    "cmd.exe", "powershell.exe", "pwsh.exe",
+    // Reconnaissance
+    "whoami.exe", "tasklist.exe", "systeminfo.exe", "ipconfig.exe",
+    "net.exe", "net1.exe", "nltest.exe", "quser.exe", "query.exe",
+    "hostname.exe", "ver.exe", "arp.exe", "nslookup.exe", "netstat.exe",
+    // LOLBins / downloaders
+    "certutil.exe", "bitsadmin.exe", "mshta.exe",
+    "wscript.exe", "cscript.exe", "rundll32.exe", "regsvr32.exe",
+    "msiexec.exe",
+    // RATs
+    "AnyDesk.exe", "TeamViewer.exe", "ScreenConnect.exe"
+)
+| project Timestamp, DeviceName, InitiatingProcessFileName,
+          FileName, ProcessCommandLine, AccountName, AccountDomain
+| sort by Timestamp desc

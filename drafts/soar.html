@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Integration Proposal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .proposal-container {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .gradient-text {
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body class="text-gray-800 antialiased p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto bg-white proposal-container rounded-xl overflow-hidden">
+        
+        <!-- Header Section -->
+        <header class="bg-slate-900 text-white p-8 md:p-12 relative overflow-hidden">
+            <div class="absolute top-0 right-0 -mt-10 -mr-10 opacity-10">
+                <svg width="300" height="300" fill="currentColor" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <div class="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center">
+                <div>
+                    <h1 class="text-3xl md:text-4xl font-bold tracking-tight mb-2">Integration Architecture Proposal</h1>
+                    <p class="text-slate-300 text-lg">Cisco Secure Endpoint • Zscaler • Global Threat Intelligence (GTI)</p>
+                </div>
+                <div class="mt-6 md:mt-0 text-right">
+                    <p class="text-sm text-slate-400 uppercase tracking-widest font-semibold">Prepared For</p>
+                    <p class="text-lg font-medium">Security Operations Team</p>
+                    <p class="text-sm text-slate-400 mt-1">October 2026</p>
+                </div>
+            </div>
+        </header>
+
+        <div class="p-8 md:p-12 space-y-12">
+            
+            <section>
+                <h2 class="text-2xl font-semibold text-slate-800 border-b-2 border-slate-100 pb-3 mb-6">1. Executive Summary</h2>
+                <p class="text-slate-600 leading-relaxed mb-4">
+                    This proposal outlines the strategic integration of our core security pillars: <strong>Cisco Secure Endpoint</strong> (Endpoint Detection and Response), <strong>Zscaler</strong> (Secure Web Gateway/Zero Trust), and <strong>Global Threat Intelligence (GTI)</strong>. By connecting these systems via a central orchestration platform (e.g., Cisco XDR or existing SOAR), we aim to achieve a unified defense-in-depth posture.
+                </p>
+                <p class="text-slate-600 leading-relaxed">
+                    The primary objective is to automate the triage of network and endpoint alerts, seamlessly enrich observables (IPs, Domains, Hashes) using GTI, and orchestrate rapid, cross-platform containment. This will significantly reduce Mean Time to Detect (MTTD) and Mean Time to Respond (MTTR).
+                </p>
+            </section>
+
+            <section>
+                <h2 class="text-2xl font-semibold text-slate-800 border-b-2 border-slate-100 pb-3 mb-6">2. Proposed Architecture & Data Flow</h2>
+                
+                <div class="bg-slate-50 p-6 rounded-lg border border-slate-200 mb-6">
+                    <div class="flex flex-col md:flex-row items-center justify-between space-y-6 md:space-y-0 md:space-x-4">
+                        
+                        <!-- Zscaler Block -->
+                        <div class="flex flex-col items-center p-4 bg-white rounded-lg shadow-sm border border-slate-100 w-full md:w-1/4">
+                            <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-3">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                            <h3 class="font-semibold text-center">Zscaler (SWG)</h3>
+                            <p class="text-xs text-center text-slate-500 mt-1">Network Telemetry & Web Enforcement</p>
+                        </div>
+
+                        <!-- Arrow -->
+                        <div class="hidden md:flex text-slate-300">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
+                        </div>
+
+                        <!-- Orchestration / GTI Block -->
+                        <div class="flex flex-col items-center p-4 bg-slate-900 text-white rounded-lg shadow-md border border-slate-800 w-full md:w-1/3 relative">
+                            <div class="absolute -top-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded uppercase tracking-wide shadow-sm">GTI Enriched</div>
+                            <div class="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center mb-3 mt-2 border border-slate-700">
+                                <svg class="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                            </div>
+                            <h3 class="font-semibold text-center text-white">Central Hub (XDR/SOAR)</h3>
+                            <p class="text-xs text-center text-slate-300 mt-1">Correlation & Workflow Execution</p>
+                        </div>
+
+                        <!-- Arrow -->
+                        <div class="hidden md:flex text-slate-300">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
+                        </div>
+
+                        <!-- Cisco Endpoint Block -->
+                        <div class="flex flex-col items-center p-4 bg-white rounded-lg shadow-sm border border-slate-100 w-full md:w-1/4">
+                            <div class="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-3">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
+                            </div>
+                            <h3 class="font-semibold text-center">Cisco Secure Endpoint</h3>
+                            <p class="text-xs text-center text-slate-500 mt-1">Device Telemetry & Isolation</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <h2 class="text-2xl font-semibold text-slate-800 border-b-2 border-slate-100 pb-3 mb-6">3. Automated Workflows (Use Cases)</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- Use Case 1 -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="bg-red-100 text-red-600 p-2 rounded-lg">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                            </div>
+                            <h3 class="text-lg font-semibold">Use Case 1: Malicious Download</h3>
+                        </div>
+                        <ul class="space-y-3 text-sm text-slate-600">
+                            <li class="flex items-start"><span class="text-blue-500 mr-2">1.</span> Zscaler detects a user attempting to download a suspicious executable.</li>
+                            <li class="flex items-start"><span class="text-blue-500 mr-2">2.</span> The file hash is sent to the central hub, which automatically queries GTI.</li>
+                            <li class="flex items-start"><span class="text-blue-500 mr-2">3.</span> GTI flags the hash as known ransomware (High Confidence).</li>
+                            <li class="flex items-start"><span class="text-blue-500 mr-2">4.</span> <strong>Response:</strong> The central hub immediately pushes the hash to Cisco Secure Endpoint to block execution globally across all devices.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Use Case 2 -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="bg-orange-100 text-orange-600 p-2 rounded-lg">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            </div>
+                            <h3 class="text-lg font-semibold">Use Case 2: C2 Beaconing</h3>
+                        </div>
+                        <ul class="space-y-3 text-sm text-slate-600">
+                            <li class="flex items-start"><span class="text-blue-500 mr-2">1.</span> Cisco Secure Endpoint detects abnormal background process activity initiating outbound connections.</li>
+                            <li class="flex items-start"><span class="text-blue-500 mr-2">2.</span> The destination IP is extracted and enriched against GTI databases.</li>
+                            <li class="flex items-start"><span class="text-blue-500 mr-2">3.</span> GTI identifies the IP as a known Command & Control (C2) server.</li>
+                            <li class="flex items-start"><span class="text-blue-500 mr-2">4.</span> <strong>Response:</strong> Zscaler is instructed via API to add the IP to a global blocklist, and Cisco Secure Endpoint isolates the host from the network.</li>
+                        </ul>
+                    </div>
+
+                </div>
+            </section>
+
+            <section>
+                <h2 class="text-2xl font-semibold text-slate-800 border-b-2 border-slate-100 pb-3 mb-6">4. Implementation Roadmap</h2>
+                <div class="space-y-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0 mr-4">
+                            <div class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-900 text-white font-bold text-sm">1</div>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium text-slate-800">API Provisioning & Connection</h4>
+                            <p class="text-sm text-slate-600 mt-1">Generate API keys for Zscaler (Cloud Connector), Cisco Secure Endpoint, and GTI. Configure Webhooks to push high-fidelity alerts into the central orchestration platform.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex">
+                        <div class="flex-shrink-0 mr-4">
+                            <div class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-900 text-white font-bold text-sm">2</div>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium text-slate-800">Enrichment Playbook Creation</h4>
+                            <p class="text-sm text-slate-600 mt-1">Build the automation rule: <em>If [New Incident contains IP, Domain, or Hash], trigger [GTI Reputation Lookup]. Append results to Incident Notes.</em></p>
+                        </div>
+                    </div>
+
+                    <div class="flex">
+                        <div class="flex-shrink-0 mr-4">
+                            <div class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-900 text-white font-bold text-sm">3</div>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium text-slate-800">Response Playbook Creation (The "Kill Switches")</h4>
+                            <p class="text-sm text-slate-600 mt-1">Develop granular response actions requiring analyst approval (or fully automated for high-confidence threats): "Isolate Endpoint" (Cisco) and "Block URL/IP" (Zscaler).</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="bg-indigo-50 p-8 rounded-xl border border-indigo-100">
+                <h2 class="text-2xl font-semibold text-indigo-900 mb-4">5. Expected Business Value</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+                    <div class="p-4">
+                        <div class="text-3xl font-bold text-indigo-600 mb-2">90%</div>
+                        <div class="text-sm text-indigo-800 font-medium">Reduction in manual lookup time via automated GTI enrichment.</div>
+                    </div>
+                    <div class="p-4 border-t md:border-t-0 md:border-l border-indigo-200">
+                        <div class="text-3xl font-bold text-indigo-600 mb-2">&lt; 5 mins</div>
+                        <div class="text-sm text-indigo-800 font-medium">Target containment time across endpoint and network perimeters.</div>
+                    </div>
+                    <div class="p-4 border-t md:border-t-0 md:border-l border-indigo-200">
+                        <div class="text-3xl font-bold text-indigo-600 mb-2">360°</div>
+                        <div class="text-sm text-indigo-800 font-medium">Unified visibility correlating user web traffic with local device execution.</div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+        
+        <!-- Footer -->
+        <footer class="bg-slate-100 p-6 text-center border-t border-slate-200">
+            <p class="text-sm text-slate-500">Confidential • For Internal Review Only</p>
+        </footer>
+
+    </div>
+</body>
+</html>

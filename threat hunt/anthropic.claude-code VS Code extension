@@ -1,0 +1,55 @@
+let lookback = 30d;
+let badHash = "ecb58cb29078d9646ad1dcdbe51526f2d9cfea06be5fb2ab183e8ecc3ab6bf15";
+let c2 = "134.209.82.225";
+let editors = dynamic(["code","code.exe","cursor","cursor.exe","windsurf","windsurf.exe","codium","vscodium","vscodium.exe","node","node.exe","electron","electron helper (plugin)","code helper (plugin)","cursor helper (plugin)"]);
+let ext = DeviceFileEvents
+| where Timestamp > ago(lookback)
+| where FolderPath has "anthropic.claude-code-2.1.313" or SHA256 == badHash
+| project Timestamp, DeviceName, AccountName=InitiatingProcessAccountName, Evidence="Malicious extension 2.1.313 on disk", Detail=FolderPath, Proc=InitiatingProcessFileName, Cmd=InitiatingProcessCommandLine;
+let tunnel = DeviceProcessEvents
+| where Timestamp > ago(lookback)
+| where FileName in~ ("ssh.exe","autossh.exe","ssh","autossh")
+| where ProcessCommandLine matches regex @"-\w*R\s*['""]?(\S*:)?\d+:(localhost|127\.0\.0\.1):22\b" or ProcessCommandLine has c2
+| where InitiatingProcessFileName in~ (editors) or InitiatingProcessCommandLine has_any ("anthropic.claude-code", "extensionHost", ".vscode", ".cursor", ".windsurf", "vscode-oss") or ProcessCommandLine has c2
+| project Timestamp, DeviceName, AccountName, Evidence="Reverse SSH tunnel from editor/extension host", Detail=ProcessCommandLine, Proc=InitiatingProcessFileName, Cmd=InitiatingProcessCommandLine;
+let beacon = DeviceNetworkEvents
+| where Timestamp > ago(lookback)
+| where RemoteIP == c2 and RemotePort in (22, 8099)
+| where InitiatingProcessFileName in~ (editors) or InitiatingProcessFileName in~ ("ssh","ssh.exe","autossh","autossh.exe")
+| project Timestamp, DeviceName, AccountName=InitiatingProcessAccountName, Evidence="C2 connection from editor/ssh", Detail=strcat(RemoteIP, ":", RemotePort), Proc=InitiatingProcessFileName, Cmd=InitiatingProcessCommandLine;
+union ext, tunnel, beacon
+| order by Timestamp desc
+
+
+let TunnelHost = "134.209.82.225";
+let ExtensionHash = "ecb58cb29078d9646ad1dcdbe51526f2d9cfea06be5fb2ab183e8ecc3ab6bf15";
+let NetHits = (T: (Timestamp: datetime, DeviceName: string, RemoteIP: string, RemotePort: int, RemoteUrl: string, InitiatingProcessFileName: string)) {
+  T
+  | where Timestamp > ago(30d)
+  | where RemoteIP == TunnelHost or RemoteUrl contains TunnelHost
+  | project Timestamp, DeviceName, Signal = "Connection to tunnel host", Detail = strcat(InitiatingProcessFileName, " to ", RemoteIP, ":", RemotePort)
+};
+let ProcHits = (T: (Timestamp: datetime, DeviceName: string, FileName: string, ProcessCommandLine: string)) {
+  T
+  | where Timestamp > ago(30d)
+  | where FileName in~ ("ssh", "ssh.exe", "autossh")
+  | where (ProcessCommandLine contains_cs "-R" and ProcessCommandLine contains "localhost:22") or ProcessCommandLine contains strcat("tunnel@", TunnelHost)
+  | project Timestamp, DeviceName, Signal = "Reverse SSH tunnel to local port 22", Detail = substring(ProcessCommandLine, 0, 200)
+};
+let FileHits = (T: (Timestamp: datetime, DeviceName: string, FileName: string, FolderPath: string, SHA256: string)) {
+  T
+  | where Timestamp > ago(30d)
+  | where SHA256 =~ ExtensionHash
+    or (FileName in~ (".smt", ".smtk", "smt.cmd", "smtk") and FolderPath contains ".config")
+    or FileName =~ "com.apple.sysmond.plist"
+    or FileName startswith ".stk_"
+    or (FileName =~ "sysmon.cmd" and FolderPath contains "Startup")
+  | project Timestamp, DeviceName, Signal = "Backdoor file artifact", Detail = FolderPath
+};
+let Combine = (N: (Timestamp: datetime, DeviceName: string, Signal: string, Detail: string), P: (Timestamp: datetime, DeviceName: string, Signal: string, Detail: string), F: (Timestamp: datetime, DeviceName: string, Signal: string, Detail: string)) {
+  union N, P, F
+  | summarize Events = count(), FirstSeen = min(Timestamp), LastSeen = max(Timestamp), Samples = make_set(Detail, 5) by DeviceName, Signal
+  | project Timestamp = LastSeen, DeviceName, Signal, Events, FirstSeen, Samples
+  | order by Timestamp desc
+};
+Combine(NetHits(DeviceNetworkEvents), ProcHits(DeviceProcessEvents), FileHits(DeviceFileEvents))

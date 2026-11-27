@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SecOps Malware Ticket Enrichment — Live Architecture & Backend Execution Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #090d16;
+      color: #e2e8f0;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Custom scrollbar for terminal/JSON logs */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Animated flow connector lines */
+    .flow-line {
+      position: relative;
+      overflow: hidden;
+    }
+    .flow-line::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.8), transparent);
+      transition: none;
+    }
+    .flow-active::after {
+      animation: flowPulse 1.1s infinite linear;
+    }
+    @keyframes flowPulse {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }
+
+    /* Subtle node glow when active */
+    .node-active {
+      box-shadow: 0 0 24px rgba(56, 189, 248, 0.28);
+      border-color: #38bdf8 !important;
+    }
+    .node-success {
+      border-color: #10b981 !important;
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.18);
+    }
+    .node-error {
+      border-color: #f43f5e !important;
+      box-shadow: 0 0 18px rgba(244, 63, 94, 0.22);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- Top Presentation Header -->
+  <header class="border-b border-slate-800 bg-slate-950/90 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-bold text-white tracking-tight">SecOps Automated Ticket Enrichment</h1>
+            <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              Non-Prod Mock Sandbox
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">ServiceNow ↔ Cisco Secure Endpoint (AMP) • Zscaler ZIA • FireEye / Trellix HX</p>
+        </div>
+      </div>
+
+      <!-- Scenario Selector & Presentation Controls -->
+      <div class="flex flex-wrap items-center gap-2.5">
+        <select id="scenarioSelect" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs sm:text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-sky-500">
+          <option value="compromised">Host 1: win10-fin-042 (Isolated & Healthy Versions)</option>
+          <option value="outdated">Host 2: mac-eng-109 (Outdated Agent / Zscaler Tunnel Off)</option>
+          <option value="rate_limit">Host 3: win11-hr-015 (Zscaler HTTP 429 Fallback)</option>
+        </select>
+
+        <button id="btnStep" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-xs sm:text-sm font-medium transition flex items-center gap-1.5 cursor-pointer">
+          <span>Next Step</span>
+          <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+
+        <button id="btnAutoRun" class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs sm:text-sm font-semibold shadow-lg shadow-sky-600/20 transition flex items-center gap-1.5 cursor-pointer">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+          </svg>
+          <span id="autoRunLabel">Run Full Demo</span>
+        </button>
+
+        <button id="btnReset" class="px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-xs sm:text-sm transition cursor-pointer" title="Reset Demo">
+          Reset
+        </button>
+      </div>
+    </div>
+
+    <!-- Step Progress Bar -->
+    <div class="bg-slate-900/80 border-t border-slate-800/80">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-2 overflow-x-auto">
+        <div id="stepperContainer" class="flex items-center gap-2 min-w-max text-xs">
+          <!-- Populated dynamically by JS -->
+        </div>
+        <div class="text-xs text-slate-400 hidden md:block font-mono" id="latencyBadge">
+          Total Elapsed: 0 ms
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Presentation Workspace -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- LEFT COLUMN (7 cols): Live Architecture Topology & ServiceNow Ticket View -->
+    <div class="lg:col-span-7 flex flex-col gap-6">
+
+      <!-- Architecture Topology Card -->
+      <section class="bg-slate-900/70 border border-slate-800 rounded-xl p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+            Backend Execution Topology
+          </h2>
+          <span id="currentStepBanner" class="text-xs font-medium px-2.5 py-1 rounded-md bg-slate-800 text-sky-300 border border-slate-700">
+            Ready — Click "Run Full Demo" or "Next Step"
+          </span>
+        </div>
+
+        <!-- Visual Nodes Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+
+          <!-- Left: ServiceNow Flask Mock -->
+          <div id="node-snow" class="bg-slate-950 border-2 border-slate-800 rounded-xl p-4 transition-all duration-300">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-emerald-400">ServiceNow</span>
+              <span id="badge-snow" class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">:8080</span>
+            </div>
+            <p class="text-sm font-semibold text-white">Table API Mock</p>
+            <p class="text-xs text-slate-400 mt-1 font-mono">/api/now/table/incident</p>
+            <div id="status-snow" class="mt-3 pt-2.5 border-t border-slate-800/80 text-xs text-slate-400">
+              Idle — Ticket queued
+            </div>
+          </div>
+
+          <!-- Center: Python Enrichment Orchestrator -->
+          <div class="flex flex-col items-center justify-center gap-2">
+            <div id="line-snow-orch" class="w-full h-1 bg-slate-800 rounded flow-line"></div>
+            <div id="node-orch" class="w-full bg-slate-950 border-2 border-slate-800 rounded-xl p-4 text-center transition-all duration-300">
+              <div class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 mb-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+              </div>
+              <p class="text-sm font-semibold text-white">Enrichment Worker</p>
+              <p class="text-[11px] text-slate-400 font-mono mt-0.5">asyncio fan-out</p>
+              <div id="status-orch" class="mt-2.5 pt-2 border-t border-slate-800/80 text-xs text-slate-400">
+                Awaiting trigger
+              </div>
+            </div>
+            <div id="line-orch-tools" class="w-full h-1 bg-slate-800 rounded flow-line"></div>
+          </div>
+
+          <!-- Right: 3 Endpoint Security Mock APIs -->
+          <div class="flex flex-col gap-3">
+            <!-- Cisco AMP -->
+            <div id="node-amp" class="bg-slate-950 border-2 border-slate-800 rounded-xl p-3 transition-all duration-300">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-cyan-400">Cisco Secure Endpoint</span>
+                <span class="text-[11px] font-mono text-slate-500">:8001</span>
+              </div>
+              <div id="status-amp" class="text-xs text-slate-400 mt-1 font-mono">GET /v1/computers</div>
+            </div>
+
+            <!-- Zscaler ZIA -->
+            <div id="node-zscaler" class="bg-slate-950 border-2 border-slate-800 rounded-xl p-3 transition-all duration-300">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-blue-400">Zscaler Client Connector</span>
+                <span class="text-[11px] font-mono text-slate-500">:8002</span>
+              </div>
+              <div id="status-zscaler" class="text-xs text-slate-400 mt-1 font-mono">GET /api/v1/devices</div>
+            </div>
+
+            <!-- FireEye HX -->
+            <div id="node-hx" class="bg-slate-950 border-2 border-slate-800 rounded-xl p-3 transition-all duration-300">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-amber-400">FireEye / Trellix HX</span>
+                <span class="text-[11px] font-mono text-slate-500">:8003</span>
+              </div>
+              <div id="status-hx" class="text-xs text-slate-400 mt-1 font-mono">GET /hx/api/v3/hosts</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Live ServiceNow Ticket State Preview Card -->
+      <section class="bg-slate-900/70 border border-slate-800 rounded-xl p-5 flex-1 flex flex-col">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-800">
+          <div class="flex items-center gap-2.5">
+            <span class="px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono text-xs font-semibold" id="ticketNumber">
+              INC0010421
+            </span>
+            <h3 class="text-sm font-semibold text-white" id="ticketTitle">Malware beacon detected on win10-fin-042</h3>
+          </div>
+          <span id="ticketEnrichmentBadge" class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+            Status: Pending Enrichment
+          </span>
+        </div>
+
+        <!-- Ticket Metadata Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 text-xs">
+          <div class="bg-slate-950 border border-slate-800/90 rounded-lg p-2.5">
+            <span class="text-slate-500 block">Triggered Endpoint</span>
+            <span class="font-mono text-slate-200 font-medium mt-0.5 block" id="ticketHost">win10-fin-042</span>
+          </div>
+          <div class="bg-slate-950 border border-slate-800/90 rounded-lg p-2.5">
+            <span class="text-slate-500 block">Internal IP</span>
+            <span class="font-mono text-slate-200 font-medium mt-0.5 block" id="ticketIp">10.24.18.42</span>
+          </div>
+          <div class="bg-slate-950 border border-slate-800/90 rounded-lg p-2.5">
+            <span class="text-slate-500 block">Assigned User</span>
+            <span class="font-mono text-slate-200 font-medium mt-0.5 block truncate" id="ticketUser">j.doe@example.com</span>
+          </div>
+          <div class="bg-slate-950 border border-slate-800/90 rounded-lg p-2.5">
+            <span class="text-slate-500 block">Trigger Rule</span>
+            <span class="font-mono text-slate-200 font-medium mt-0.5 block truncate" id="ticketTrigger">Malware Execution</span>
+          </div>
+        </div>
+
+        <!-- Endpoint Security Tools State & Version Matrix -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 text-xs">
+          <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+            <div class="text-[11px] font-bold text-cyan-400 uppercase">Cisco AMP</div>
+            <div class="mt-1.5 flex justify-between">
+              <span class="text-slate-500">Version:</span>
+              <span class="font-mono text-slate-200" id="matrix-amp-ver">—</span>
+            </div>
+            <div class="mt-1 flex justify-between">
+              <span class="text-slate-500">State:</span>
+              <span class="font-mono text-slate-200" id="matrix-amp-state">—</span>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+            <div class="text-[11px] font-bold text-blue-400 uppercase">Zscaler (ZCC)</div>
+            <div class="mt-1.5 flex justify-between">
+              <span class="text-slate-500">Version:</span>
+              <span class="font-mono text-slate-200" id="matrix-zcc-ver">—</span>
+            </div>
+            <div class="mt-1 flex justify-between">
+              <span class="text-slate-500">State:</span>
+              <span class="font-mono text-slate-200" id="matrix-zcc-state">—</span>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+            <div class="text-[11px] font-bold text-amber-400 uppercase">FireEye HX</div>
+            <div class="mt-1.5 flex justify-between">
+              <span class="text-slate-500">Version:</span>
+              <span class="font-mono text-slate-200" id="matrix-hx-ver">—</span>
+            </div>
+            <div class="mt-1 flex justify-between">
+              <span class="text-slate-500">State:</span>
+              <span class="font-mono text-slate-200" id="matrix-hx-state">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Work Notes Feed -->
+        <div class="flex-1 flex flex-col">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">ServiceNow Activity Stream (Work Notes)</span>
+            <span class="text-[11px] font-mono text-slate-500">PATCH /api/now/table/incident/{sys_id}</span>
+          </div>
+          <div id="workNotesContainer" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-3.5 font-mono text-xs text-slate-400 overflow-y-auto min-h-[160px] flex items-center justify-center">
+            <span class="italic text-slate-500">No enrichment work notes posted yet. Run the workflow to populate analyst triage context.</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- RIGHT COLUMN (5 cols): Live Backend Execution Trace & HTTP Payload Inspector -->
+    <div class="lg:col-span-5 flex flex-col gap-6">
+      <section class="bg-slate-950 border border-slate-800 rounded-xl flex flex-col h-full overflow-hidden shadow-xl">
+        <!-- Terminal Header -->
+        <div class="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500/80"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500/80"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></span>
+            <span class="ml-2 text-xs font-mono font-semibold text-slate-300">backend-execution-trace.log</span>
+          </div>
+          <button id="btnClearLog" class="text-[11px] font-mono text-slate-400 hover:text-white transition cursor-pointer">
+            Clear
+          </button>
+        </div>
+
+        <!-- Step Explanation Callout -->
+        <div id="stepExplanationBox" class="px-4 py-3 bg-sky-950/30 border-b border-sky-900/40 text-xs text-sky-200 leading-relaxed">
+          <strong class="text-sky-400 block mb-0.5">Presentation Presenter Note:</strong>
+          Select a scenario at the top and click <strong>Next Step</strong> to step through each HTTP request/response manually during your presentation, or click <strong>Run Full Demo</strong>.
+        </div>
+
+        <!-- Scrolling HTTP Trace Log -->
+        <div id="executionLog" class="p-4 font-mono text-xs space-y-3 overflow-y-auto flex-1 max-h-[620px]">
+          <div class="text-slate-500">
+            $ python enrichment_worker.py --snow-url http://127.0.0.1:8080 --amp-url http://127.0.0.1:8001 --zscaler-url http://127.0.0.1:8002 --hx-url http://127.0.0.1:8003
+          </div>
+          <div class="text-emerald-400">
+            [INIT] Mock endpoints verified healthy. Ready for ticket trigger.
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <script>
+    // =========================================================================
+    // Mock Scenario Datasets (Focused on Tool Versions & Endpoint States)
+    // =========================================================================
+    const SCENARIOS = {
+      compromised: {
+        ticket: {
+          sys_id: "sys_inc_001",
+          number: "INC0010421",
+          table: "incident",
+          short_description: "Malware alert triggered on win10-fin-042",
+          cmdb_ci: "win10-fin-042",
+          ip: "10.24.18.42",
+          user: "j.doe@example.com",
+          trigger: "Malware Alert"
+        },
+        amp: {
+          guid: "8a1b2c3d-4e5f-6789-abcd-ef0123456789",
+          version: "8.4.1.21400",
+          state: "Online / Isolated",
+          policy: "Windows Workstations - Protect"
+        },
+        zscaler: {
+          status: 200,
+          version: "4.4.0.112",
+          state: "Registered / ZIA Active"
+        },
+        hx: {
+          agentId: "HX-AGT-9948102",
+          version: "36.30.0",
+          state: "Online / Contained"
+        },
+        summaryNote: "All 3 endpoint security agents verified present on current versions; host is isolated in Cisco AMP and contained in FireEye HX."
+      },
+      outdated: {
+        ticket: {
+          sys_id: "sys_sir_002",
+          number: "SIR0002088",
+          table: "sn_si_incident",
+          short_description: "Malware alert triggered on mac-eng-109",
+          cmdb_ci: "mac-eng-109",
+          ip: "10.24.19.109",
+          user: "a.smith@example.com",
+          trigger: "Malware Alert"
+        },
+        amp: {
+          guid: "11112222-3333-4444-5555-666677778888",
+          version: "8.1.3.19002 (Outdated)",
+          state: "Online / Not Isolated",
+          policy: "macOS Engineering - Audit"
+        },
+        zscaler: {
+          status: 200,
+          version: "4.2.0.88 (Outdated)",
+          state: "Tunnel Disabled / Bypassed"
+        },
+        hx: {
+          agentId: "HX-AGT-5520194",
+          version: "35.14.2",
+          state: "Online / Normal"
+        },
+        summaryNote: "HEALTH GAP: Cisco AMP and Zscaler agents are running outdated versions, and Zscaler tunnel is disabled on the endpoint."
+      },
+      rate_limit: {
+        ticket: {
+          sys_id: "sys_inc_003",
+          number: "INC0010499",
+          table: "incident",
+          short_description: "Malware alert triggered on win11-hr-015",
+          cmdb_ci: "win11-hr-015",
+          ip: "10.24.22.15",
+          user: "m.chen@example.com",
+          trigger: "Malware Alert"
+        },
+        amp: {
+          guid: "77778888-9999-aaaa-bbbb-ccccddddeeee",
+          version: "8.4.1.21400",
+          state: "Online / Not Isolated",
+          policy: "Windows Workstations - Protect"
+        },
+        zscaler: {
+          status: 429,
+          version: "Unknown (HTTP 429)",
+          state: "API Rate Limited"
+        },
+        hx: {
+          agentId: "HX-AGT-3310948",
+          version: "36.30.0",
+          state: "Offline (Last seen 4h ago)"
+        },
+        summaryNote: "PARTIAL CHECK: Cisco AMP is online (v8.4.1.21400), FireEye HX agent is offline, and Zscaler API returned HTTP 429."
+      }
+    };
+
+    // =========================================================================
+    // Step Definitions for Presentation Walkthrough
+    // =========================================================================
+    const STEPS = [
+      { id: 1, label: "1. Ticket Trigger (ServiceNow)" },
+      { id: 2, label: "2. Authenticate APIs" },
+      { id: 3, label: "3. Fetch Tool Versions & States" },
+      { id: 4, label: "4. Format Health Table" },
+      { id: 5, label: "5. Post Work Note (PATCH)" }
+    ];
+
+    let currentStep = 0;
+    let totalLatencyMs = 0;
+    let autoTimer = null;
+
+    // DOM Elements
+    const scenarioSelect = document.getElementById("scenarioSelect");
+    const stepperContainer = document.getElementById("stepperContainer");
+    const executionLog = document.getElementById("executionLog");
+    const stepExplanationBox = document.getElementById("stepExplanationBox");
+    const currentStepBanner = document.getElementById("currentStepBanner");
+    const latencyBadge = document.getElementById("latencyBadge");
+    const workNotesContainer = document.getElementById("workNotesContainer");
+
+    function getScenario() {
+      return SCENARIOS[scenarioSelect.value];
+    }
+
+    function renderStepper() {
+      stepperContainer.innerHTML = STEPS.map((step, idx) => {
+        const isDone = currentStep > step.id;
+        const isCurrent = currentStep === step.id;
+        let cls = "bg-slate-950 text-slate-500 border-slate-800";
+        if (isCurrent) cls = "bg-sky-500/20 text-sky-300 border-sky-500/50 font-semibold";
+        else if (isDone) cls = "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+
+        const arrow = idx < STEPS.length - 1 ? `<span class="text-slate-700">→</span>` : "";
+        return `<span class="px-2.5 py-1 rounded-md border ${cls} transition-colors">${step.label}</span>${arrow}`;
+      }).join("");
+    }
+
+    function appendLog(tag, tagColor, title, payloadObj = null) {
+      const entry = document.createElement("div");
+      entry.className = "border-l-2 border-slate-700 pl-3 py-0.5 animate-fadeIn";
+      const timeStr = new Date().toISOString().split("T")[1].replace("Z", "");
+
+      let html = `
+        <div class="flex items-center gap-2">
+          <span class="text-slate-500">[${timeStr}]</span>
+          <span class="px-1.5 py-0.2 rounded text-[10px] font-bold uppercase ${tagColor}">${tag}</span>
+          <span class="text-slate-200 font-medium">${title}</span>
+        </div>
+      `;
+      if (payloadObj) {
+        html += `<pre class="mt-1.5 p-2.5 rounded bg-slate-900/90 border border-slate-800/90 text-[11px] text-slate-300 overflow-x-auto">${JSON.stringify(payloadObj, null, 2)}</pre>`;
+      }
+      entry.innerHTML = html;
+      executionLog.appendChild(entry);
+      executionLog.scrollTop = executionLog.scrollHeight;
+    }
+
+    function setNodeState(nodeId, state) {
+      const el = document.getElementById(nodeId);
+      el.classList.remove("node-active", "node-success", "node-error");
+      if (state === "active") el.classList.add("node-active");
+      if (state === "success") el.classList.add("node-success");
+      if (state === "error") el.classList.add("node-error");
+    }
+
+    function updateTicketHeader() {
+      const s = getScenario();
+      document.getElementById("ticketNumber").textContent = s.ticket.number;
+      document.getElementById("ticketTitle").textContent = s.ticket.short_description;
+      document.getElementById("ticketHost").textContent = s.ticket.cmdb_ci;
+      document.getElementById("ticketIp").textContent = s.ticket.ip;
+      document.getElementById("ticketUser").textContent = s.ticket.user;
+      document.getElementById("ticketTrigger").textContent = s.ticket.trigger;
+    }
+
+    function resetDemo() {
+      if (autoTimer) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+        document.getElementById("autoRunLabel").textContent = "Run Full Demo";
+      }
+      currentStep = 0;
+      totalLatencyMs = 0;
+      latencyBadge.textContent = "Total Elapsed: 0 ms";
+      currentStepBanner.textContent = 'Ready — Click "Run Full Demo" or "Next Step"';
+
+      ["node-snow", "node-orch", "node-amp", "node-zscaler", "node-hx"].forEach(id => setNodeState(id, null));
+      document.getElementById("line-snow-orch").classList.remove("flow-active");
+      document.getElementById("line-orch-tools").classList.remove("flow-active");
+
+      document.getElementById("status-snow").textContent = "Idle — Ticket queued";
+      document.getElementById("status-orch").textContent = "Awaiting trigger";
+      document.getElementById("status-amp").textContent = "GET /v1/computers";
+      document.getElementById("status-zscaler").textContent = "GET /api/v1/devices";
+      document.getElementById("status-hx").textContent = "GET /hx/api/v3/hosts";
+
+      ["matrix-amp-ver", "matrix-amp-state", "matrix-zcc-ver", "matrix-zcc-state", "matrix-hx-ver", "matrix-hx-state"].forEach(id => {
+        document.getElementById(id).textContent = "—";
+      });
+
+      const badge = document.getElementById("ticketEnrichmentBadge");
+      badge.className = "px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30";
+      badge.textContent = "Status: Pending Enrichment";
+
+      workNotesContainer.innerHTML = `<span class="italic text-slate-500">No enrichment work notes posted yet. Run the workflow to fetch endpoint tool versions & states.</span>`;
+
+      stepExplanationBox.innerHTML = `
+        <strong class="text-sky-400 block mb-0.5">Presentation Presenter Note:</strong>
+        Select a host scenario above and click <strong>Next Step</strong> to show how the backend fetches each security tool's <strong>version</strong> and <strong>operational state</strong> when a malware ticket triggers.
+      `;
+
+      updateTicketHeader();
+      renderStepper();
+    }
+
+    function executeNextStep() {
+      if (currentStep >= STEPS.length) {
+        if (autoTimer) {
+          clearInterval(autoTimer);
+          autoTimer = null;
+          document.getElementById("autoRunLabel").textContent = "Run Full Demo";
+        }
+        return;
+      }
+
+      currentStep++;
+      renderStepper();
+      const s = getScenario();
+
+      // -----------------------------------------------------------------------
+      // STEP 1: Fetch Malware Ticket & Endpoint Hostname from ServiceNow
+      // -----------------------------------------------------------------------
+      if (currentStep === 1) {
+        totalLatencyMs += 58;
+        currentStepBanner.textContent = "Step 1/5: Fetching Malware Ticket from ServiceNow";
+        setNodeState("node-snow", "active");
+        setNodeState("node-orch", "active");
+        document.getElementById("line-snow-orch").classList.add("flow-active");
+
+        document.getElementById("status-snow").textContent = `200 OK — Served ${s.ticket.number}`;
+        document.getElementById("status-orch").textContent = `Target Host: ${s.ticket.cmdb_ci}`;
+
+        stepExplanationBox.innerHTML = `
+          <strong class="text-sky-400 block mb-0.5">Step 1 — Malware Ticket Trigger:</strong>
+          A malware alert creates <code>${s.ticket.number}</code> in ServiceNow. The worker fetches the record and extracts the endpoint hostname (<code>${s.ticket.cmdb_ci}</code>) and user (<code>${s.ticket.user}</code>).
+        `;
+
+        appendLog(
+          "GET → SNOW",
+          "bg-emerald-500/20 text-emerald-300",
+          `GET /api/now/table/${s.ticket.table}/${s.ticket.sys_id} (58ms)`,
+          {
+            number: s.ticket.number,
+            short_description: s.ticket.short_description,
+            cmdb_ci: s.ticket.cmdb_ci,
+            caller_email: s.ticket.user
+          }
+        );
+      }
+
+      // -----------------------------------------------------------------------
+      // STEP 2: Authenticate Against All Three Security Tool APIs
+      // -----------------------------------------------------------------------
+      else if (currentStep === 2) {
+        totalLatencyMs += 110;
+        currentStepBanner.textContent = "Step 2/5: Authenticating API Sessions";
+        setNodeState("node-snow", "success");
+        document.getElementById("line-snow-orch").classList.remove("flow-active");
+        document.getElementById("line-orch-tools").classList.add("flow-active");
+
+        setNodeState("node-amp", "active");
+        setNodeState("node-zscaler", "active");
+        setNodeState("node-hx", "active");
+
+        document.getElementById("status-orch").textContent = "Authenticating 3 APIs...";
+        document.getElementById("status-amp").textContent = "Basic Auth Ready";
+        document.getElementById("status-zscaler").textContent = "JSESSIONID Minted";
+        document.getElementById("status-hx").textContent = "X-FeApi-Token Minted";
+
+        stepExplanationBox.innerHTML = `
+          <strong class="text-sky-400 block mb-0.5">Step 2 — Read-Only API Authentication:</strong>
+          The worker authenticates using read-only credentials: HTTP Basic Auth for <strong>Cisco AMP</strong>, session login for <strong>Zscaler</strong>, and token exchange for <strong>FireEye HX</strong>.
+        `;
+
+        appendLog(
+          "AUTH",
+          "bg-sky-500/20 text-sky-300",
+          "Authenticated read-only sessions across all 3 tools (110ms)",
+          {
+            cisco_amp: "HTTP Basic Auth (Read-Only)",
+            zscaler: "Cookie: JSESSIONID=mock-jsessionid-99887766",
+            fireeye_hx: "Header: X-FeApi-Token: mock-fe-api-token-abc123xyz"
+          }
+        );
+      }
+
+      // -----------------------------------------------------------------------
+      // STEP 3: Fetch Agent Version & Operational State from Each Tool
+      // -----------------------------------------------------------------------
+      else if (currentStep === 3) {
+        totalLatencyMs += 195;
+        currentStepBanner.textContent = "Step 3/5: Fetching Tool Versions & Endpoint States";
+        document.getElementById("status-orch").textContent = "Collected 3 tool responses";
+
+        // Cisco AMP
+        setNodeState("node-amp", "success");
+        document.getElementById("status-amp").textContent = `v${s.amp.version.split(" ")[0]} | ${s.amp.state}`;
+        document.getElementById("matrix-amp-ver").textContent = s.amp.version;
+        document.getElementById("matrix-amp-state").textContent = s.amp.state;
+
+        // Zscaler
+        if (s.zscaler.status === 429) {
+          setNodeState("node-zscaler", "error");
+          document.getElementById("status-zscaler").textContent = "HTTP 429 Rate Limited";
+        } else {
+          setNodeState("node-zscaler", "success");
+          document.getElementById("status-zscaler").textContent = `v${s.zscaler.version.split(" ")[0]} | ${s.zscaler.state}`;
+        }
+        document.getElementById("matrix-zcc-ver").textContent = s.zscaler.version;
+        document.getElementById("matrix-zcc-state").textContent = s.zscaler.state;
+
+        // FireEye HX
+        setNodeState("node-hx", "success");
+        document.getElementById("status-hx").textContent = `v${s.hx.version} | ${s.hx.state}`;
+        document.getElementById("matrix-hx-ver").textContent = s.hx.version;
+        document.getElementById("matrix-hx-state").textContent = s.hx.state;
+
+        stepExplanationBox.innerHTML = `
+          <strong class="text-sky-400 block mb-0.5">Step 3 — Querying Version & State for <code>${s.ticket.cmdb_ci}</code>:</strong>
+          Each API returns the installed agent/connector version (<code>connector_version</code>, ZCC client version, HX agent version) and current state (online/offline, isolated/contained, tunnel active).
+        `;
+
+        appendLog(
+          "GET → AMP",
+          "bg-cyan-500/20 text-cyan-300",
+          `GET /v1/computers?hostname=${s.ticket.cmdb_ci} → 200 OK`,
+          {
+            hostname: s.ticket.cmdb_ci,
+            connector_guid: s.amp.guid,
+            connector_version: s.amp.version,
+            state: s.amp.state,
+            policy: s.amp.policy
+          }
+        );
+
+        if (s.zscaler.status === 429) {
+          appendLog(
+            "GET → ZCC",
+            "bg-rose-500/20 text-rose-300",
+            `GET /api/v1/devices?hostname=${s.ticket.cmdb_ci} → 429 Too Many Requests`,
+            {
+              error: "Rate limit exceeded (simulated)",
+              fallback: "Marking Zscaler version/state as Unknown without failing ticket update"
+            }
+          );
+        } else {
+          appendLog(
+            "GET → ZCC",
+            "bg-blue-500/20 text-blue-300",
+            `GET /api/v1/devices?hostname=${s.ticket.cmdb_ci} → 200 OK`,
+            {
+              hostname: s.ticket.cmdb_ci,
+              user: s.ticket.user,
+              client_version: s.zscaler.version,
+              tunnel_state: s.zscaler.state
+            }
+          );
+        }
+
+        appendLog(
+          "GET → HX",
+          "bg-amber-500/20 text-amber-300",
+          `GET /hx/api/v3/hosts?search=${s.ticket.cmdb_ci} → 200 OK`,
+          {
+            hostname: s.ticket.cmdb_ci,
+            agent_id: s.hx.agentId,
+            agent_version: s.hx.version,
+            state: s.hx.state
+          }
+        );
+      }
+
+      // -----------------------------------------------------------------------
+      // STEP 4: Format Normalized Version & State Summary
+      // -----------------------------------------------------------------------
+      else if (currentStep === 4) {
+        totalLatencyMs += 15;
+        currentStepBanner.textContent = "Step 4/5: Formatting Endpoint Tool State Table";
+        document.getElementById("line-orch-tools").classList.remove("flow-active");
+        document.getElementById("status-orch").textContent = "Built work note summary";
+
+        stepExplanationBox.innerHTML = `
+          <strong class="text-sky-400 block mb-0.5">Step 4 — Normalizing Versions & States:</strong>
+          The worker maps the three vendor JSON payloads into a clean, consistent status block so the analyst immediately sees whether security controls are online, up to date, and isolated.
+        `;
+
+        appendLog(
+          "FORMAT",
+          "bg-purple-500/20 text-purple-300",
+          "Normalized tool versions and states (15ms)",
+          {
+            endpoint: s.ticket.cmdb_ci,
+            cisco_amp: { version: s.amp.version, state: s.amp.state },
+            zscaler: { version: s.zscaler.version, state: s.zscaler.state },
+            fireeye_hx: { version: s.hx.version, state: s.hx.state }
+          }
+        );
+      }
+
+      // -----------------------------------------------------------------------
+      // STEP 5: Write Enriched Work Notes Back to ServiceNow
+      // -----------------------------------------------------------------------
+      else if (currentStep === 5) {
+        totalLatencyMs += 68;
+        currentStepBanner.textContent = "Step 5/5: Work Notes Posted to ServiceNow!";
+        document.getElementById("line-snow-orch").classList.add("flow-active");
+        setNodeState("node-orch", "success");
+        setNodeState("node-snow", "success");
+
+        document.getElementById("status-orch").textContent = "Complete (5/5 steps)";
+        document.getElementById("status-snow").textContent = `200 OK — ${s.ticket.number} Updated`;
+
+        const badge = document.getElementById("ticketEnrichmentBadge");
+        badge.className = "px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/40";
+        badge.textContent = "Status: Enriched";
+
+        const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+        const workNoteText = [
+          `=== ENDPOINT SECURITY TOOLS STATE & VERSION ===`,
+          `Host : ${s.ticket.cmdb_ci} (${s.ticket.ip}) | User: ${s.ticket.user}`,
+          `-----------------------------------------------`,
+          `1. Cisco Secure Endpoint (AMP)`,
+          `   • Version : ${s.amp.version}`,
+          `   • State   : ${s.amp.state}`,
+          ``,
+          `2. Zscaler Client Connector (ZCC)`,
+          `   • Version : ${s.zscaler.version}`,
+          `   • State   : ${s.zscaler.state}`,
+          ``,
+          `3. FireEye / Trellix HX`,
+          `   • Version : ${s.hx.version}`,
+          `   • State   : ${s.hx.state}`,
+          `-----------------------------------------------`,
+          `NOTE: ${s.summaryNote}`
+        ].join("\n");
+
+        workNotesContainer.classList.remove("items-center", "justify-center");
+        workNotesContainer.innerHTML = `
+          <div class="w-full space-y-2">
+            <div class="flex items-center justify-between text-[11px] text-emerald-400 border-b border-slate-800 pb-1.5">
+              <span>Posted by: secops_enrichment_bot</span>
+              <span>${timestamp}</span>
+            </div>
+            <pre class="whitespace-pre-wrap text-slate-200 leading-relaxed text-[11px]">${workNoteText}</pre>
+          </div>
+        `;
+
+        stepExplanationBox.innerHTML = `
+          <strong class="text-emerald-400 block mb-0.5">Step 5 Complete — Ticket Updated:</strong>
+          The worker sends a <code>PATCH</code> request to ServiceNow, recording the exact agent version and operational state of Cisco AMP, Zscaler, and FireEye HX directly inside <code>${s.ticket.number}</code>.
+        `;
+
+        appendLog(
+          "PATCH → SNOW",
+          "bg-emerald-500/20 text-emerald-300",
+          `PATCH /api/now/table/${s.ticket.table}/${s.ticket.sys_id} → 200 OK (68ms)`,
+          {
+            u_enrichment_status: "Enriched",
+            work_notes_posted: true
+          }
+        );
+
+        setTimeout(() => {
+          document.getElementById("line-snow-orch").classList.remove("flow-active");
+        }, 1200);
+      }
+
+      latencyBadge.textContent = `Total Elapsed: ${totalLatencyMs} ms`;
+    }
+
+    // Event Listeners
+    document.getElementById("btnStep").addEventListener("click", () => {
+      if (currentStep >= STEPS.length) resetDemo();
+      executeNextStep();
+    });
+
+    document.getElementById("btnAutoRun").addEventListener("click", () => {
+      if (autoTimer) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+        document.getElementById("autoRunLabel").textContent = "Run Full Demo";
+        return;
+      }
+      resetDemo();
+      document.getElementById("autoRunLabel").textContent = "Pause Demo";
+      executeNextStep();
+      autoTimer = setInterval(() => {
+        if (currentStep >= STEPS.length) {
+          clearInterval(autoTimer);
+          autoTimer = null;
+          document.getElementById("autoRunLabel").textContent = "Run Full Demo";
+        } else {
+          executeNextStep();
+        }
+      }, 1500);
+    });
+
+    document.getElementById("btnReset").addEventListener("click", resetDemo);
+    scenarioSelect.addEventListener("change", resetDemo);
+
+    document.getElementById("btnClearLog").addEventListener("click", () => {
+      executionLog.innerHTML = `<div class="text-slate-500">[LOG CLEARED] Ready for next execution step.</div>`;
+    });
+
+    // Initialize on load
+    resetDemo();
+  </script>
+</body>
+</html>
